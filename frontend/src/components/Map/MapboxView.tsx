@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import { routeApi } from '../../services/api';
-import { MapPin, Navigation, Send, Search, Car, Play, Info, User, LogOut, ShieldCheck } from 'lucide-react';
+import { MapPin, Navigation, Send, Car, Play, Info, User, LogOut, ShieldCheck } from 'lucide-react';
 import { io, Socket } from 'socket.io-client';
 import AuthModal from '../Auth/AuthModal';
 
