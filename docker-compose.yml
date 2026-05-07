@@ -6,7 +6,7 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     ports:
-      - "3001:3000"
+      - "4000:3000"
     volumes:
       - backend_data:/app/data
     environment:
@@ -21,9 +21,9 @@ services:
       dockerfile: Dockerfile
       args:
         - VITE_MAPBOX_PUBLIC_TOKEN=${VITE_MAPBOX_PUBLIC_TOKEN}
-        - VITE_API_URL=http://2.24.81.205:3001
+        - VITE_API_URL=http://2.24.81.205:4000
     ports:
-      - "80:80"
+      - "8081:80"
     depends_on:
       - backend
     restart: always
