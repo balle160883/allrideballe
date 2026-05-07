@@ -1,0 +1,16 @@
+# Dependencias
+node_modules/
+dist/
+.DS_Store
+
+# Variables de entorno (SENSIDLE)
+.env
+.env.local
+
+# Base de datos local
+*.db
+*.db-journal
+
+# IDEs
+.vscode/
+.idea/
