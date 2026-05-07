@@ -12,7 +12,7 @@ services:
     environment:
       - DATABASE_URL=file:../data/dev.db
       - JWT_SECRET=allride-super-secret-key-2026
-      - MAPBOX_SECRET_TOKEN=sk.eyJ1IjoiZGpiYjE2MDg4MyIsImEiOiJjbW9kNDdnMncwN2NrMm5wdnc3bXFpbTQ5In0.e1U1-wl6D6CElaFNv_t9SA
+      - MAPBOX_SECRET_TOKEN=${MAPBOX_SECRET_TOKEN}
     restart: always
 
   frontend:
@@ -20,7 +20,7 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
       args:
-        - VITE_MAPBOX_PUBLIC_TOKEN=pk.eyJ1IjoiZGpiYjE2MDg4MyIsImEiOiJjbWl4ZnVocGMwM3k4M2xvOXkzMXY2eWxhIn0.yNlKzNWQ7gwTGSCq5jI6IA
+        - VITE_MAPBOX_PUBLIC_TOKEN=${VITE_MAPBOX_PUBLIC_TOKEN}
         - VITE_API_URL=http://2.24.81.205:3001
     ports:
       - "80:80"
