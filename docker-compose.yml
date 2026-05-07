@@ -5,8 +5,7 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    ports:
-      - "4000:3000"
+    # Quitamos puertos directos para usar dominios de Dokploy
     volumes:
       - backend_data:/app/data
     environment:
@@ -21,9 +20,8 @@ services:
       dockerfile: Dockerfile
       args:
         - VITE_MAPBOX_PUBLIC_TOKEN=${VITE_MAPBOX_PUBLIC_TOKEN}
-        - VITE_API_URL=http://2.24.81.205:4000
-    ports:
-      - "8081:80"
+        - VITE_API_URL=https://allride-api.2.24.81.205.sslip.io
+    # El puerto 80 es interno, Dokploy lo mapea al dominio
     depends_on:
       - backend
     restart: always
