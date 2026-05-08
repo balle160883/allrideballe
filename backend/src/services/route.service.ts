@@ -10,8 +10,12 @@ export class RouteService {
    * Obtiene la ruta optimizada entre dos puntos
    */
   static async getRoute(origin: Location, destination: Location) {
+    if (!directionsService) {
+      throw new Error('Servicio de Mapbox no disponible (Token faltante)');
+    }
     try {
       const response = await directionsService
+
         .getDirections({
           profile: 'driving-traffic',
           waypoints: [
