@@ -19,8 +19,9 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
       args:
-        - VITE_MAPBOX_PUBLIC_TOKEN=${VITE_MAPBOX_PUBLIC_TOKEN}
+        - VITE_MAPBOX_PUBLIC_TOKEN=pk.eyJ1IjoiZGpiYjE2MDg4MyIsImEiOiJjbWl4ZnVocGMwM3k4M2xvOXkzMXY2eWxhIn0.yNlKzNWQ7gwTGSCq5jI6IA
         - VITE_API_URL=https://allride-api.2.24.81.205.sslip.io
+
     # El puerto 80 es interno, Dokploy lo mapea al dominio
     depends_on:
       - backend
