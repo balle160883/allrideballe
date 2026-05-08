@@ -7,7 +7,7 @@ import http from 'http';
 import { Server } from 'socket.io';
 
 // Cargar .env
-dotenv.config({ path: path.join(__dirname, '../../.env') });
+dotenv.config();
 
 const app = express();
 const server = http.createServer(app);
