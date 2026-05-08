@@ -11,18 +11,27 @@ dotenv.config({ path: path.join(__dirname, '../../.env') });
 
 const app = express();
 const server = http.createServer(app);
+
+const frontendUrl = process.env.FRONTEND_URL || 'https://allride-app.2.24.81.205.sslip.io';
+
 const io = new Server(server, {
   cors: {
-    origin: '*',
-    methods: ['GET', 'POST']
+    origin: [frontendUrl, "http://localhost:5173"],
+    methods: ['GET', 'POST'],
+    credentials: true
   }
 });
 
 const PORT = process.env.PORT || 3000;
 
 // Middleware
-app.use(helmet());
-app.use(cors());
+app.use(helmet({
+  crossOriginResourcePolicy: false,
+}));
+app.use(cors({
+  origin: [frontendUrl, "http://localhost:5173"],
+  credentials: true
+}));
 app.use(express.json());
 
 import routeRoutes from './routes/route.routes';
