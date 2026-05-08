@@ -9,7 +9,7 @@ services:
     volumes:
       - backend_data:/app/data
     environment:
-      - DATABASE_URL=file:../data/dev.db
+      - DATABASE_URL=file:./data/dev.db
       - JWT_SECRET=allride-super-secret-key-2026
       - MAPBOX_SECRET_TOKEN=${MAPBOX_SECRET_TOKEN}
     restart: always
