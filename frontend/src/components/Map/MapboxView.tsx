@@ -30,7 +30,7 @@ const MapboxView: React.FC = () => {
   const rideMarkers = useRef<mapboxgl.Marker[]>([]);
 
   const [selectedCategory, setSelectedCategory] = useState<'carpool' | 'shuttle' | 'taxi'>('carpool');
-  const geocoderContainerRef = useRef<HTMLDivElement>(null);
+
 
   useEffect(() => {
     if (!mapContainerRef.current) return;
