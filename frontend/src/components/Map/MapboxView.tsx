@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import { routeApi } from '../../services/api';
-import { MapPin, Navigation, Send, Car, Play, Info, User, LogOut, ShieldCheck } from 'lucide-react';
+import { MapPin, Navigation, Send, Car, Play, Info, User, LogOut, ShieldCheck, Search } from 'lucide-react';
 import { io, Socket } from 'socket.io-client';
 import AuthModal from '../Auth/AuthModal';
 
@@ -32,8 +32,53 @@ const MapboxView: React.FC = () => {
   const [selectedCategory, setSelectedCategory] = useState<'carpool' | 'shuttle' | 'taxi'>('carpool');
 
 
+  const [searchQuery, setSearchQuery] = useState('');
+  const [suggestions, setSuggestions] = useState<any[]>([]);
+
+  const handleSearch = async (query: string) => {
+    setSearchQuery(query);
+    if (query.length < 3) {
+      setSuggestions([]);
+      return;
+    }
+
+    try {
+      const resp = await fetch(
+        `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(query)}.json?access_token=${MAPBOX_TOKEN}&limit=5&language=es`
+      );
+      const data = await resp.json();
+      setSuggestions(data.features || []);
+    } catch (err) {
+      console.error('Error en geocoding:', err);
+    }
+  };
+
+  const selectSuggestion = (feature: any) => {
+    const coords = feature.center;
+    const lngLat = new mapboxgl.LngLat(coords[0], coords[1]);
+    
+    setSearchQuery(feature.place_name);
+    setSuggestions([]);
+
+    // Mover mapa
+    mapRef.current?.flyTo({ center: coords, zoom: 15, duration: 2000 });
+
+    // Fijar como destino si ya hay origen, o como origen si no hay nada
+    if (!origin) {
+      setOrigin(lngLat);
+      if (originMarker.current) originMarker.current.remove();
+      originMarker.current = new mapboxgl.Marker({ color: '#10b981' }).setLngLat(lngLat).addTo(mapRef.current!);
+    } else {
+      setDestination(lngLat);
+      if (destMarker.current) destMarker.current.remove();
+      destMarker.current = new mapboxgl.Marker({ color: '#f43f5e' }).setLngLat(lngLat).addTo(mapRef.current!);
+      calculateAndShowRoute(origin, lngLat);
+    }
+  };
+
   useEffect(() => {
     if (!mapContainerRef.current) return;
+
 
     socketRef.current = io(SOCKET_URL);
     mapboxgl.accessToken = MAPBOX_TOKEN;
@@ -228,14 +273,33 @@ const MapboxView: React.FC = () => {
         {/* Buscador Destino */}
         <div className="mb-6 relative">
           <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
-            <MapPin size={18} />
+            <Search size={18} />
           </div>
           <input 
             type="text" 
+            value={searchQuery}
+            onChange={(e) => handleSearch(e.target.value)}
             placeholder="¿A dónde vas?" 
             className="w-full bg-slate-800/50 border border-white/5 rounded-2xl py-4 pl-11 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/50 transition-all placeholder:text-slate-500"
           />
+
+          {/* Lista de Sugerencias */}
+          {suggestions.length > 0 && (
+            <div className="absolute top-full left-0 right-0 mt-2 bg-slate-900 border border-white/10 rounded-2xl overflow-hidden shadow-2xl z-50">
+              {suggestions.map((s, i) => (
+                <button
+                  key={i}
+                  onClick={() => selectSuggestion(s)}
+                  className="w-full text-left p-4 hover:bg-white/5 border-b border-white/5 last:border-none transition-colors"
+                >
+                  <p className="text-sm font-bold truncate">{s.text}</p>
+                  <p className="text-[10px] text-slate-500 truncate">{s.place_name}</p>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
+
 
         {currentUser && (
           <div className="mb-6 p-4 bg-indigo-500/10 rounded-2xl border border-indigo-500/20">
