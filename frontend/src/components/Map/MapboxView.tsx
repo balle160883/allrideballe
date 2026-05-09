@@ -29,6 +29,9 @@ const MapboxView: React.FC = () => {
   const vehicleMarker = useRef<mapboxgl.Marker | null>(null);
   const rideMarkers = useRef<mapboxgl.Marker[]>([]);
 
+  const [selectedCategory, setSelectedCategory] = useState<'carpool' | 'shuttle' | 'taxi'>('carpool');
+  const geocoderContainerRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     if (!mapContainerRef.current) return;
 
@@ -37,11 +40,14 @@ const MapboxView: React.FC = () => {
     
     mapRef.current = new mapboxgl.Map({
       container: mapContainerRef.current,
-      style: 'mapbox://styles/mapbox/navigation-night-v1',
+      style: 'mapbox://styles/mapbox/dark-v11', // Estilo más elegante y visible
       center: [-99.1332, 19.4326],
       zoom: 12,
       pitch: 45,
     });
+
+    // Añadir controles de navegación
+    mapRef.current.addControl(new mapboxgl.NavigationControl(), 'bottom-right');
 
     mapRef.current.on('load', () => {
       setupLayers();
@@ -52,7 +58,6 @@ const MapboxView: React.FC = () => {
       if (isPublishing) handleMapClick(e.lngLat);
     });
 
-    // Revisar si hay sesión previa
     const savedUser = localStorage.getItem('user');
     if (savedUser) setCurrentUser(JSON.parse(savedUser));
 
@@ -74,7 +79,7 @@ const MapboxView: React.FC = () => {
       type: 'line',
       source: 'route',
       layout: { 'line-join': 'round', 'line-cap': 'round' },
-      paint: { 'line-color': '#8b5cf6', 'line-width': 6, 'line-opacity': 0.8 }
+      paint: { 'line-color': '#6366f1', 'line-width': 5, 'line-opacity': 0.8 }
     });
   };
 
@@ -175,15 +180,39 @@ const MapboxView: React.FC = () => {
   };
 
   return (
-    <div className="relative w-full h-screen">
+    <div className="relative w-full h-screen bg-[#0f172a]">
       <div ref={mapContainerRef} className="absolute inset-0" />
       
+      {/* Header flotante estilo AllRide */}
+      <div className="absolute top-6 left-1/2 -translate-x-1/2 z-10 flex gap-2 bg-slate-900/80 backdrop-blur-xl p-1.5 rounded-2xl border border-white/10 shadow-2xl">
+        {[
+          { id: 'carpool', label: 'Carpool', icon: Car },
+          { id: 'shuttle', label: 'Van', icon: Navigation },
+          { id: 'taxi', label: 'Taxi', icon: Play },
+        ].map((cat) => (
+          <button
+            key={cat.id}
+            onClick={() => setSelectedCategory(cat.id as any)}
+            className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-sm font-bold transition-all ${
+              selectedCategory === cat.id 
+                ? 'bg-brand-primary text-white shadow-lg shadow-brand-primary/20 scale-105' 
+                : 'text-slate-400 hover:text-white hover:bg-white/5'
+            }`}
+          >
+            <cat.icon size={16} />
+            {cat.label}
+          </button>
+        ))}
+      </div>
+
       <div className="absolute top-6 left-6 z-10 glass-morphism p-6 rounded-3xl w-80 text-white shadow-2xl transition-all duration-500 max-h-[90vh] overflow-y-auto">
         {/* Header con Perfil de Usuario */}
         <div className="flex items-center justify-between mb-6">
-          <h1 className="text-xl font-bold flex items-center gap-2">
-            <Navigation className="text-brand-primary" size={24} />
-            AllRide
+          <h1 className="text-xl font-black flex items-center gap-2 tracking-tighter">
+            <div className="w-8 h-8 bg-brand-primary rounded-lg flex items-center justify-center">
+              <Navigation size={18} fill="white" />
+            </div>
+            ALLRIDE
           </h1>
           {currentUser ? (
             <button onClick={logout} className="p-2 hover:bg-slate-800 rounded-full text-slate-400 hover:text-rose-400 transition-colors">
@@ -196,18 +225,30 @@ const MapboxView: React.FC = () => {
           )}
         </div>
 
+        {/* Buscador Destino */}
+        <div className="mb-6 relative">
+          <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
+            <MapPin size={18} />
+          </div>
+          <input 
+            type="text" 
+            placeholder="¿A dónde vas?" 
+            className="w-full bg-slate-800/50 border border-white/5 rounded-2xl py-4 pl-11 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/50 transition-all placeholder:text-slate-500"
+          />
+        </div>
+
         {currentUser && (
-          <div className="mb-6 p-4 bg-slate-800/40 rounded-2xl border border-slate-700/50">
+          <div className="mb-6 p-4 bg-indigo-500/10 rounded-2xl border border-indigo-500/20">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-indigo-500 flex items-center justify-center font-bold">
+              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center font-bold shadow-lg">
                 {currentUser.fullName[0]}
               </div>
               <div>
                 <p className="text-sm font-bold flex items-center gap-1">
                   {currentUser.fullName}
-                  {currentUser.isVerified && <ShieldCheck size={14} className="text-brand-primary" />}
+                  {currentUser.isVerified && <ShieldCheck size={14} className="text-emerald-400" />}
                 </p>
-                <p className="text-[10px] text-slate-400">{currentUser.email}</p>
+                <p className="text-[10px] text-indigo-300 font-medium">Miembro Premium</p>
               </div>
             </div>
           </div>
@@ -215,26 +256,32 @@ const MapboxView: React.FC = () => {
         
         {!isPublishing && !isSimulating ? (
           <div className="space-y-6">
-            <div className="flex gap-2">
-              <button onClick={() => setIsPublishing(true)} className="flex-1 py-3 bg-brand-primary hover:bg-brand-secondary transition-all rounded-xl font-semibold flex items-center justify-center gap-2">
-                <Car size={18} /> Publicar
-              </button>
-            </div>
+            <button onClick={() => setIsPublishing(true)} className="w-full py-4 bg-gradient-to-r from-brand-primary to-brand-secondary hover:brightness-110 transition-all rounded-2xl font-bold flex items-center justify-center gap-2 shadow-xl shadow-indigo-500/20">
+              <Play size={18} fill="currentColor" /> Iniciar Viaje
+            </button>
 
             <div className="space-y-3">
-              <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wider">Viajes Disponibles</h2>
+              <div className="flex justify-between items-center px-1">
+                <h2 className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">Cerca de ti</h2>
+                <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></span>
+              </div>
               {availableRides.length === 0 ? (
-                <p className="text-xs text-slate-500 italic">No hay viajes activos.</p>
+                <div className="p-8 text-center bg-slate-800/20 rounded-2xl border border-dashed border-white/10">
+                   <Car size={32} className="mx-auto mb-2 text-slate-600" />
+                   <p className="text-xs text-slate-500">Buscando viajes en {selectedCategory}...</p>
+                </div>
               ) : (
                 availableRides.map((ride, idx) => (
-                  <div key={idx} onClick={() => calculateAndShowRoute({lng: ride.originLng, lat: ride.originLat} as any, {lng: ride.destLng, lat: ride.destLat} as any)} className="p-4 bg-slate-800/40 rounded-xl border border-slate-700/50 hover:border-brand-primary/50 transition-all cursor-pointer">
-                    <p className="text-sm font-bold flex items-center gap-1">
-                      {ride.driver.fullName}
-                      {ride.driver.isVerified && <ShieldCheck size={12} className="text-brand-primary" />}
-                    </p>
-                    <div className="flex justify-between mt-1">
-                      <p className="text-[10px] text-slate-400">{(ride.distance / 1000).toFixed(1)} km</p>
-                      <p className="text-sm font-bold text-emerald-400">${ride.pricePerSeat}</p>
+                  <div key={idx} onClick={() => calculateAndShowRoute({lng: ride.originLng, lat: ride.originLat} as any, {lng: ride.destLng, lat: ride.destLat} as any)} className="p-4 bg-slate-800/40 rounded-2xl border border-white/5 hover:border-brand-primary/50 transition-all cursor-pointer group">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <p className="text-sm font-bold flex items-center gap-1 group-hover:text-brand-primary transition-colors">
+                          {ride.driver.fullName}
+                          {ride.driver.isVerified && <ShieldCheck size={12} className="text-emerald-400" />}
+                        </p>
+                        <p className="text-[10px] text-slate-400 mt-0.5">{(ride.distance / 1000).toFixed(1)} km • 12 min</p>
+                      </div>
+                      <p className="text-lg font-black text-white">${ride.pricePerSeat}</p>
                     </div>
                   </div>
                 ))
@@ -242,21 +289,28 @@ const MapboxView: React.FC = () => {
             </div>
           </div>
         ) : isSimulating ? (
-          <div className="p-4 bg-brand-primary/20 rounded-xl border border-brand-primary/30 animate-pulse text-center">
-             <Car className="mx-auto mb-2 text-brand-primary" size={32} />
-             <p className="text-sm font-bold">Viaje en curso...</p>
-             <p className="text-xs text-slate-400">Siguiendo trayectoria GPS</p>
+          <div className="p-6 bg-brand-primary/10 rounded-3xl border border-brand-primary/20 text-center space-y-4">
+             <div className="relative w-16 h-16 mx-auto">
+               <div className="absolute inset-0 bg-brand-primary/20 rounded-full animate-ping"></div>
+               <div className="relative bg-brand-primary rounded-full w-16 h-16 flex items-center justify-center shadow-lg shadow-brand-primary/40">
+                  <Car className="text-white" size={32} />
+               </div>
+             </div>
+             <div>
+               <p className="text-sm font-black uppercase tracking-widest">En camino</p>
+               <p className="text-[10px] text-slate-400">Siguiendo ruta optimizada</p>
+             </div>
           </div>
         ) : (
           <div className="space-y-4">
              <div className="space-y-2">
-                <div className="flex items-center gap-3 p-3 bg-slate-800/50 rounded-lg border border-slate-700">
-                  <MapPin size={18} className={origin ? 'text-emerald-400' : 'text-slate-500'} />
-                  <span className="text-sm truncate">{origin ? 'Origen fijado' : 'Fijar Origen'}</span>
+                <div className="flex items-center gap-3 p-4 bg-slate-800/50 rounded-2xl border border-white/5 group hover:border-emerald-500/50 transition-all">
+                  <div className={`w-2 h-2 rounded-full ${origin ? 'bg-emerald-500 shadow-[0_0_10px_#10b981]' : 'bg-slate-600'}`} />
+                  <span className={`text-xs font-medium ${origin ? 'text-white' : 'text-slate-500'}`}>{origin ? 'Punto de partida listo' : 'Fijar Origen en el mapa'}</span>
                 </div>
-                <div className="flex items-center gap-3 p-3 bg-slate-800/50 rounded-lg border border-slate-700">
-                  <MapPin size={18} className={destination ? 'text-rose-400' : 'text-slate-500'} />
-                  <span className="text-sm truncate">{destination ? 'Destino fijado' : 'Fijar Destino'}</span>
+                <div className="flex items-center gap-3 p-4 bg-slate-800/50 rounded-2xl border border-white/5 group hover:border-rose-500/50 transition-all">
+                  <div className={`w-2 h-2 rounded-full ${destination ? 'bg-rose-500 shadow-[0_0_10px_#f43f5e]' : 'bg-slate-600'}`} />
+                  <span className={`text-xs font-medium ${destination ? 'text-white' : 'text-slate-500'}`}>{destination ? 'Destino establecido' : 'Fijar Destino en el mapa'}</span>
                 </div>
              </div>
 
