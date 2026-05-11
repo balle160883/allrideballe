@@ -2,12 +2,13 @@ import React, { useEffect, useRef, useState } from 'react';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import { routeApi } from '../../services/api';
-import { Navigation, Car, Play, User, LogOut, ShieldCheck, Search, Star, Wallet, Plus } from 'lucide-react';
+import { Navigation, Car, Play, User, LogOut, ShieldCheck, Search, Star, Wallet, Plus, MessageCircle } from 'lucide-react';
 import { io, Socket } from 'socket.io-client';
 import AuthModal from '../Auth/AuthModal';
 import AdminDashboard from '../Admin/AdminDashboard';
 import ChatWindow from '../Chat/ChatWindow';
-import { MessageCircle } from 'lucide-react';
+import NotificationToast from '../Notifications/NotificationToast';
+import type { ToastProps } from '../Notifications/NotificationToast';
 
 const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_PUBLIC_TOKEN;
 const SOCKET_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
@@ -29,6 +30,16 @@ const MapboxView: React.FC = () => {
   const [showBottomSheet, setShowBottomSheet] = useState(false);
   const [isAdminOpen, setIsAdminOpen] = useState(false);
   const [isChatOpen, setIsChatOpen] = useState(false);
+  const [notifications, setNotifications] = useState<any[]>([]);
+
+  const addNotification = (title: string, message: string, type: any = 'info') => {
+    const id = Math.random().toString(36).substring(7);
+    setNotifications(prev => [...prev, { id, title, message, type }]);
+  };
+
+  const removeNotification = (id: string) => {
+    setNotifications(prev => prev.filter(n => n.id !== id));
+  };
   const [userRole, setUserRole] = useState<'passenger' | 'driver'>('passenger');
   const [isDriverOnline, setIsDriverOnline] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<'carpool' | 'shuttle' | 'taxi'>('carpool');
@@ -39,6 +50,7 @@ const MapboxView: React.FC = () => {
 
   const handleTopUp = () => {
     setBalance(prev => prev + 500);
+    addNotification('Recarga Exitosa', 'Se han añadido $500.00 a tu cuenta AllRide.', 'success');
   };
 
   const originMarker = useRef<mapboxgl.Marker | null>(null);
@@ -576,6 +588,15 @@ const MapboxView: React.FC = () => {
 
       <AuthModal isOpen={isAuthOpen} onClose={() => setIsAuthOpen(false)} onSuccess={handleAuthSuccess} />
       
+      {/* Sistema de Notificaciones Premium */}
+      <div className="fixed top-6 left-1/2 -translate-x-1/2 z-[200] flex flex-col items-center pointer-events-none">
+        {notifications.map(n => (
+          <div key={n.id} className="pointer-events-auto">
+            <NotificationToast {...n} onClose={removeNotification} />
+          </div>
+        ))}
+      </div>
+
       {/* Botón de Acceso Admin - Discreto */}
       <button 
         onClick={() => setIsAdminOpen(true)}
