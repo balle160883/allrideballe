@@ -5,6 +5,7 @@ import { routeApi } from '../../services/api';
 import { Navigation, Car, Play, User, LogOut, ShieldCheck, Search, Star, Wallet, Plus } from 'lucide-react';
 import { io, Socket } from 'socket.io-client';
 import AuthModal from '../Auth/AuthModal';
+import AdminDashboard from '../Admin/AdminDashboard';
 
 const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_PUBLIC_TOKEN;
 const SOCKET_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
@@ -24,6 +25,7 @@ const MapboxView: React.FC = () => {
   const [availableRides, setAvailableRides] = useState<any[]>([]);
   const [isSimulating, setIsSimulating] = useState(false);
   const [showBottomSheet, setShowBottomSheet] = useState(false);
+  const [isAdminOpen, setIsAdminOpen] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<'carpool' | 'shuttle' | 'taxi'>('carpool');
   const [searchQuery, setSearchQuery] = useState('');
   const [suggestions, setSuggestions] = useState<any[]>([]);
@@ -495,6 +497,16 @@ const MapboxView: React.FC = () => {
       </div>
 
       <AuthModal isOpen={isAuthOpen} onClose={() => setIsAuthOpen(false)} onSuccess={handleAuthSuccess} />
+      
+      {/* Botón de Acceso Admin - Discreto */}
+      <button 
+        onClick={() => setIsAdminOpen(true)}
+        className="absolute bottom-6 left-6 z-10 w-10 h-10 bg-slate-900/50 backdrop-blur-md border border-white/5 rounded-xl flex items-center justify-center text-slate-600 hover:text-indigo-400 hover:bg-slate-900 transition-all shadow-xl"
+      >
+        <ShieldCheck size={20} />
+      </button>
+
+      {isAdminOpen && <AdminDashboard onClose={() => setIsAdminOpen(false)} />}
     </div>
   );
 };
