@@ -68,6 +68,16 @@ io.on('connection', (socket) => {
     console.log(`👤 Pasajero siguiendo viaje: ${rideId}`);
   });
 
+  socket.on('sendMessage', (data) => {
+    const { rideId, message, senderId, senderName } = data;
+    io.to(`ride_${rideId}`).emit('receiveMessage', { 
+      message, 
+      senderId, 
+      senderName, 
+      timestamp: new Date() 
+    });
+  });
+
   socket.on('disconnect', () => {
     console.log('❌ Cliente desconectado');
   });

@@ -6,6 +6,8 @@ import { Navigation, Car, Play, User, LogOut, ShieldCheck, Search, Star, Wallet,
 import { io, Socket } from 'socket.io-client';
 import AuthModal from '../Auth/AuthModal';
 import AdminDashboard from '../Admin/AdminDashboard';
+import ChatWindow from '../Chat/ChatWindow';
+import { MessageCircle } from 'lucide-react';
 
 const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_PUBLIC_TOKEN;
 const SOCKET_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
@@ -26,6 +28,7 @@ const MapboxView: React.FC = () => {
   const [isSimulating, setIsSimulating] = useState(false);
   const [showBottomSheet, setShowBottomSheet] = useState(false);
   const [isAdminOpen, setIsAdminOpen] = useState(false);
+  const [isChatOpen, setIsChatOpen] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<'carpool' | 'shuttle' | 'taxi'>('carpool');
   const [searchQuery, setSearchQuery] = useState('');
   const [suggestions, setSuggestions] = useState<any[]>([]);
@@ -486,11 +489,14 @@ const MapboxView: React.FC = () => {
           </div>
 
           <div className="flex gap-4">
+            <button onClick={() => setIsChatOpen(true)} className="w-16 h-16 bg-slate-800 hover:bg-slate-700 text-indigo-400 rounded-3xl flex items-center justify-center transition-all border border-white/5 shadow-lg">
+              <MessageCircle size={28} />
+            </button>
             <button onClick={() => setShowBottomSheet(false)} className="flex-1 py-5 bg-slate-800 hover:bg-slate-700 text-white rounded-3xl font-black text-sm transition-all">
               CANCELAR
             </button>
             <button onClick={handleConfirmRide} className="flex-[2] py-5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-3xl font-black text-sm shadow-2xl shadow-indigo-500/40 transition-all scale-105">
-              CONFIRMAR Y PAGAR
+              CONFIRMAR
             </button>
           </div>
         </div>
@@ -507,6 +513,15 @@ const MapboxView: React.FC = () => {
       </button>
 
       {isAdminOpen && <AdminDashboard onClose={() => setIsAdminOpen(false)} />}
+      
+      {isChatOpen && routeInfo && (
+        <ChatWindow 
+          socket={socketRef.current} 
+          rideId={routeInfo.id || 'sim-1'} 
+          currentUser={currentUser} 
+          onClose={() => setIsChatOpen(false)} 
+        />
+      )}
     </div>
   );
 };
