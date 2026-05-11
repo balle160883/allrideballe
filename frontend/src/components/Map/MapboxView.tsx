@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import { routeApi } from '../../services/api';
-import { Navigation, Car, Play, User, LogOut, ShieldCheck, Search, Star } from 'lucide-react';
+import { Navigation, Car, Play, User, LogOut, ShieldCheck, Search, Star, Wallet, Plus } from 'lucide-react';
 import { io, Socket } from 'socket.io-client';
 import AuthModal from '../Auth/AuthModal';
 
@@ -27,6 +27,12 @@ const MapboxView: React.FC = () => {
   const [selectedCategory, setSelectedCategory] = useState<'carpool' | 'shuttle' | 'taxi'>('carpool');
   const [searchQuery, setSearchQuery] = useState('');
   const [suggestions, setSuggestions] = useState<any[]>([]);
+
+  const [balance, setBalance] = useState(1250.50);
+
+  const handleTopUp = () => {
+    setBalance(prev => prev + 500);
+  };
 
   const originMarker = useRef<mapboxgl.Marker | null>(null);
   const destMarker = useRef<mapboxgl.Marker | null>(null);
@@ -325,17 +331,46 @@ const MapboxView: React.FC = () => {
         </div>
 
         {currentUser && (
-          <div className="mb-6 p-4 bg-indigo-600/10 rounded-2xl border border-indigo-500/20">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center font-bold shadow-lg">
-                {currentUser.fullName[0]}
+          <div className="space-y-4">
+            {/* Perfil */}
+            <div className="p-4 bg-indigo-600/10 rounded-2xl border border-indigo-500/20">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center font-bold shadow-lg">
+                  {currentUser.fullName[0]}
+                </div>
+                <div>
+                  <p className="text-sm font-bold flex items-center gap-1">
+                    {currentUser.fullName}
+                    {currentUser.isVerified && <ShieldCheck size={14} className="text-emerald-400" />}
+                  </p>
+                  <p className="text-[10px] text-indigo-300 font-medium uppercase tracking-wider">Miembro Premium</p>
+                </div>
               </div>
-              <div>
-                <p className="text-sm font-bold flex items-center gap-1">
-                  {currentUser.fullName}
-                  {currentUser.isVerified && <ShieldCheck size={14} className="text-emerald-400" />}
-                </p>
-                <p className="text-[10px] text-indigo-300 font-medium uppercase tracking-wider">Miembro Premium</p>
+            </div>
+
+            {/* Wallet Card Premium */}
+            <div className="relative group">
+              <div className="absolute inset-0 bg-gradient-to-br from-indigo-600 to-purple-700 rounded-3xl blur-xl opacity-20 group-hover:opacity-30 transition-opacity" />
+              <div className="relative p-6 bg-gradient-to-br from-slate-800/80 to-slate-900/80 backdrop-blur-xl rounded-3xl border border-white/10 shadow-xl overflow-hidden">
+                <div className="absolute top-0 right-0 p-8 bg-indigo-500/10 rounded-full -translate-y-1/2 translate-x-1/2 blur-2xl" />
+                <div className="flex justify-between items-start mb-8">
+                   <div className="w-10 h-10 bg-white/5 rounded-xl flex items-center justify-center border border-white/10">
+                      <Wallet size={20} className="text-indigo-400" />
+                   </div>
+                   <button onClick={handleTopUp} className="w-8 h-8 bg-indigo-500 hover:bg-indigo-400 rounded-full flex items-center justify-center shadow-lg transition-colors">
+                      <Plus size={16} className="text-white" />
+                   </button>
+                </div>
+                <p className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] mb-1">Saldo Disponible</p>
+                <p className="text-3xl font-black text-white tracking-tighter">${balance.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</p>
+                
+                <div className="mt-6 flex justify-between items-end">
+                   <p className="text-[10px] text-slate-500 font-mono">**** **** **** 8834</p>
+                   <div className="flex -space-x-2">
+                      <div className="w-6 h-6 rounded-full bg-rose-500/80 blur-[1px]" />
+                      <div className="w-6 h-6 rounded-full bg-amber-500/80 blur-[1px]" />
+                   </div>
+                </div>
               </div>
             </div>
           </div>
