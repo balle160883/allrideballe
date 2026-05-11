@@ -29,6 +29,8 @@ const MapboxView: React.FC = () => {
   const [showBottomSheet, setShowBottomSheet] = useState(false);
   const [isAdminOpen, setIsAdminOpen] = useState(false);
   const [isChatOpen, setIsChatOpen] = useState(false);
+  const [userRole, setUserRole] = useState<'passenger' | 'driver'>('passenger');
+  const [isDriverOnline, setIsDriverOnline] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<'carpool' | 'shuttle' | 'taxi'>('carpool');
   const [searchQuery, setSearchQuery] = useState('');
   const [suggestions, setSuggestions] = useState<any[]>([]);
@@ -44,6 +46,34 @@ const MapboxView: React.FC = () => {
   const vehicleMarker = useRef<mapboxgl.Marker | null>(null);
   const ghostMarkers = useRef<{ [key: string]: mapboxgl.Marker }>({});
   const rideMarkers = useRef<mapboxgl.Marker[]>([]);
+  const passengerMarkers = useRef<mapboxgl.Marker[]>([]);
+
+  const simulateNearbyPassengers = () => {
+    passengerMarkers.current.forEach(m => m.remove());
+    passengerMarkers.current = [];
+    
+    if (!isDriverOnline) return;
+
+    const center = mapRef.current?.getCenter() || new mapboxgl.LngLat(-99.1332, 19.4326);
+    for (let i = 0; i < 5; i++) {
+      const lng = center.lng + (Math.random() - 0.5) * 0.03;
+      const lat = center.lat + (Math.random() - 0.5) * 0.03;
+      
+      const el = document.createElement('div');
+      el.innerHTML = `<div style="background: #f97316; width: 32px; height: 32px; border-radius: 50%; border: 3px solid white; display: flex; align-items: center; justify-content: center; color: white; box-shadow: 0 0 15px rgba(249, 115, 22, 0.5);"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="3"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></div>`;
+      
+      const marker = new mapboxgl.Marker(el)
+        .setLngLat([lng, lat])
+        .setPopup(new mapboxgl.Popup({ offset: 25 }).setHTML('<p className="text-xs font-bold">Pasajero esperando</p>'))
+        .addTo(mapRef.current!);
+      
+      passengerMarkers.current.push(marker);
+    }
+  };
+
+  useEffect(() => {
+    simulateNearbyPassengers();
+  }, [isDriverOnline]);
 
   const simulateNearbyDrivers = () => {
     const center = mapRef.current?.getCenter() || new mapboxgl.LngLat(-99.1332, 19.4326);
@@ -337,51 +367,93 @@ const MapboxView: React.FC = () => {
 
         {currentUser && (
           <div className="space-y-4">
-            {/* Perfil */}
-            <div className="p-4 bg-indigo-600/10 rounded-2xl border border-indigo-500/20">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center font-bold shadow-lg">
-                  {currentUser.fullName[0]}
-                </div>
-                <div>
-                  <p className="text-sm font-bold flex items-center gap-1">
-                    {currentUser.fullName}
-                    {currentUser.isVerified && <ShieldCheck size={14} className="text-emerald-400" />}
-                  </p>
-                  <p className="text-[10px] text-indigo-300 font-medium uppercase tracking-wider">Miembro Premium</p>
-                </div>
-              </div>
+            {/* Role Switcher */}
+            <div className="flex p-1 bg-slate-800/50 rounded-2xl border border-white/5">
+              <button 
+                onClick={() => setUserRole('passenger')}
+                className={`flex-1 py-2 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${userRole === 'passenger' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-500 hover:text-slate-300'}`}
+              >
+                Pasajero
+              </button>
+              <button 
+                onClick={() => setUserRole('driver')}
+                className={`flex-1 py-2 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${userRole === 'driver' ? 'bg-orange-600 text-white shadow-lg' : 'text-slate-500 hover:text-slate-300'}`}
+              >
+                Conductor
+              </button>
             </div>
 
-            {/* Wallet Card Premium */}
-            <div className="relative group">
-              <div className="absolute inset-0 bg-gradient-to-br from-indigo-600 to-purple-700 rounded-3xl blur-xl opacity-20 group-hover:opacity-30 transition-opacity" />
-              <div className="relative p-6 bg-gradient-to-br from-slate-800/80 to-slate-900/80 backdrop-blur-xl rounded-3xl border border-white/10 shadow-xl overflow-hidden">
-                <div className="absolute top-0 right-0 p-8 bg-indigo-500/10 rounded-full -translate-y-1/2 translate-x-1/2 blur-2xl" />
-                <div className="flex justify-between items-start mb-8">
-                   <div className="w-10 h-10 bg-white/5 rounded-xl flex items-center justify-center border border-white/10">
-                      <Wallet size={20} className="text-indigo-400" />
-                   </div>
-                   <button onClick={handleTopUp} className="w-8 h-8 bg-indigo-500 hover:bg-indigo-400 rounded-full flex items-center justify-center shadow-lg transition-colors">
-                      <Plus size={16} className="text-white" />
-                   </button>
-                </div>
-                <p className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] mb-1">Saldo Disponible</p>
-                <p className="text-3xl font-black text-white tracking-tighter">${balance.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</p>
-                
-                <div className="mt-6 flex justify-between items-end">
-                   <p className="text-[10px] text-slate-500 font-mono">**** **** **** 8834</p>
-                   <div className="flex -space-x-2">
-                      <div className="w-6 h-6 rounded-full bg-rose-500/80 blur-[1px]" />
-                      <div className="w-6 h-6 rounded-full bg-amber-500/80 blur-[1px]" />
-                   </div>
+            {/* Wallet Card Premium (Solo Pasajero) */}
+            {userRole === 'passenger' && (
+              <div className="relative group">
+                <div className="absolute inset-0 bg-gradient-to-br from-indigo-600 to-purple-700 rounded-3xl blur-xl opacity-20 group-hover:opacity-30 transition-opacity" />
+                <div className="relative p-6 bg-gradient-to-br from-slate-800/80 to-slate-900/80 backdrop-blur-xl rounded-3xl border border-white/10 shadow-xl overflow-hidden">
+                  <div className="absolute top-0 right-0 p-8 bg-indigo-500/10 rounded-full -translate-y-1/2 translate-x-1/2 blur-2xl" />
+                  <div className="flex justify-between items-start mb-8">
+                    <div className="w-10 h-10 bg-white/5 rounded-xl flex items-center justify-center border border-white/10">
+                        <Wallet size={20} className="text-indigo-400" />
+                    </div>
+                    <button onClick={handleTopUp} className="w-8 h-8 bg-indigo-500 hover:bg-indigo-400 rounded-full flex items-center justify-center shadow-lg transition-colors">
+                        <Plus size={16} className="text-white" />
+                    </button>
+                  </div>
+                  <p className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] mb-1">Saldo Disponible</p>
+                  <p className="text-3xl font-black text-white tracking-tighter">${balance.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</p>
                 </div>
               </div>
-            </div>
+            )}
+
+            {/* Driver Online Control (Solo Conductor) */}
+            {userRole === 'driver' && (
+              <div className="space-y-4">
+                <div className={`p-6 rounded-[32px] border transition-all duration-500 ${isDriverOnline ? 'bg-orange-600/10 border-orange-500/30 shadow-[0_0_20px_rgba(249,115,22,0.1)]' : 'bg-slate-800/40 border-white/5'}`}>
+                   <div className="flex justify-between items-center mb-6">
+                      <div>
+                         <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">Estado del Servicio</p>
+                         <h3 className={`text-xl font-black tracking-tighter ${isDriverOnline ? 'text-orange-500' : 'text-slate-400'}`}>
+                           {isDriverOnline ? 'EN LÍNEA' : 'DESCONECTADO'}
+                         </h3>
+                      </div>
+                      <button 
+                        onClick={() => setIsDriverOnline(!isDriverOnline)}
+                        className={`w-14 h-8 rounded-full relative transition-all duration-300 ${isDriverOnline ? 'bg-orange-500' : 'bg-slate-700'}`}
+                      >
+                        <div className={`absolute top-1 w-6 h-6 bg-white rounded-full transition-all duration-300 shadow-md ${isDriverOnline ? 'left-7' : 'left-1'}`} />
+                      </button>
+                   </div>
+
+                   <div className="grid grid-cols-2 gap-3">
+                      <div className="p-3 bg-slate-900/50 rounded-2xl border border-white/5">
+                         <p className="text-[9px] font-black text-slate-500 uppercase mb-1">Viajes Hoy</p>
+                         <p className="text-lg font-black">12</p>
+                      </div>
+                      <div className="p-3 bg-slate-900/50 rounded-2xl border border-white/5">
+                         <p className="text-[9px] font-black text-slate-500 uppercase mb-1">Ganancias</p>
+                         <p className="text-lg font-black text-orange-400">$840</p>
+                      </div>
+                   </div>
+                </div>
+
+                {isDriverOnline && (
+                  <div className="p-5 bg-slate-900 rounded-[32px] border border-white/5 animate-pulse">
+                     <div className="flex items-center gap-3 mb-4">
+                        <div className="w-2 h-2 bg-orange-500 rounded-full" />
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Buscando Pasajeros...</p>
+                     </div>
+                     <div className="space-y-3">
+                        <div className="h-12 bg-slate-800/50 rounded-xl border border-white/5 flex items-center px-4 gap-3">
+                           <div className="w-2 h-2 bg-slate-700 rounded-full" />
+                           <div className="h-2 w-24 bg-slate-700 rounded-full" />
+                        </div>
+                     </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
         
-        {!isPublishing && !isSimulating ? (
+        {userRole === 'passenger' && !isPublishing && !isSimulating ? (
           <div className="space-y-6">
             <button onClick={() => setIsPublishing(true)} className="w-full py-4 bg-gradient-to-r from-indigo-600 to-violet-600 hover:brightness-110 transition-all rounded-2xl font-bold flex items-center justify-center gap-2 shadow-xl shadow-indigo-500/20">
               <Play size={18} fill="currentColor" /> Publicar Ruta
