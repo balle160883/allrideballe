@@ -31,7 +31,41 @@ const MapboxView: React.FC = () => {
   const originMarker = useRef<mapboxgl.Marker | null>(null);
   const destMarker = useRef<mapboxgl.Marker | null>(null);
   const vehicleMarker = useRef<mapboxgl.Marker | null>(null);
+  const ghostMarkers = useRef<{ [key: string]: mapboxgl.Marker }>({});
   const rideMarkers = useRef<mapboxgl.Marker[]>([]);
+
+  const simulateNearbyDrivers = () => {
+    const center = mapRef.current?.getCenter() || new mapboxgl.LngLat(-99.1332, 19.4326);
+    const drivers = [
+      { id: 'ghost-1', name: 'Carlos', car: 'Model 3', color: '#6366f1' },
+      { id: 'ghost-2', name: 'Ana', car: 'Bolt EV', color: '#10b981' },
+      { id: 'ghost-3', name: 'Luis', car: 'Mustang Mach-E', color: '#f43f5e' },
+      { id: 'ghost-4', name: 'Sofía', car: 'Leaf', color: '#f59e0b' },
+    ];
+
+    drivers.forEach(driver => {
+      const startLng = center.lng + (Math.random() - 0.5) * 0.02;
+      const startLat = center.lat + (Math.random() - 0.5) * 0.02;
+      
+      const el = document.createElement('div');
+      el.innerHTML = `<div style="background: ${driver.color}; width: 24px; height: 24px; border-radius: 6px; border: 2px solid white; display: flex; align-items: center; justify-content: center; color: white; transform: rotate(45deg); box-shadow: 0 0 10px ${driver.color}80; cursor: pointer;"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="3" style="transform: rotate(-45deg)"><path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.5 2.5C2.1 11.2 2 11.6 2 12v4c0 .6.4 1 1 1h2"/><circle cx="7" cy="17" r="2"/><path d="M9 17h6"/><circle cx="17" cy="17" r="2"/></svg></div>`;
+
+      const marker = new mapboxgl.Marker(el)
+        .setLngLat([startLng, startLat])
+        .setPopup(new mapboxgl.Popup({ offset: 25, closeButton: false }).setHTML(`<div style="padding: 4px; color: #1e293b;"><p style="font-weight: 800; font-size: 10px; margin: 0;">${driver.name.toUpperCase()}</p><p style="font-size: 9px; margin: 0; opacity: 0.7;">${driver.car}</p></div>`))
+        .addTo(mapRef.current!);
+      
+      ghostMarkers.current[driver.id] = marker;
+
+      let currLng = startLng;
+      let currLat = startLat;
+      setInterval(() => {
+        currLng += (Math.random() - 0.5) * 0.00015;
+        currLat += (Math.random() - 0.5) * 0.00015;
+        marker.setLngLat([currLng, currLat]);
+      }, 1500);
+    });
+  };
 
   useEffect(() => {
     if (!mapContainerRef.current) return;
@@ -52,6 +86,7 @@ const MapboxView: React.FC = () => {
     mapRef.current.on('load', () => {
       setupLayers();
       loadAvailableRides();
+      simulateNearbyDrivers();
     });
 
     mapRef.current.on('click', (e) => {
