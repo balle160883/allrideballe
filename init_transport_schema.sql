@@ -110,7 +110,8 @@ ON CONFLICT (cliente_email) DO NOTHING;
 INSERT INTO "usuarios" ("id", "email", "password_hash", "nombre", "rol", "identificador_tarjeta", "gestor_code") VALUES
 ('1a111111-1111-1111-1111-111111111111', 'admin@allride.com', 'password', 'Administrador Cliente', 'admin_cliente', NULL, NULL),
 ('2b222222-2222-2222-2222-222222222222', 'conductor1@allride.com', 'password', 'Juan Pérez (Conductor)', 'conductor', NULL, 'CONDU01'),
-('3c3c3c3c-3c3c-3c3c-3c3c-3c3c3c3c3c3c', 'pasajero1@allride.com', 'password', 'María Gómez (Pasajero)', 'pasajero', 'QR-9988776655', NULL);
+('3c3c3c3c-3c3c-3c3c-3c3c-3c3c3c3c3c3c', 'pasajero1@allride.com', 'password', 'María Gómez (Pasajero)', 'pasajero', 'QR-9988776655', NULL),
+('4d4d4d4d-4d4d-4d4d-4d4d-4d4d4d4d4d4d', 'ing.ballesteros16@gmail.com', 'Seguridad2026@', 'Administrador Global', 'admin_cliente', NULL, NULL);
 
 -- 2. Insertar rutas con paradas GeoJSON/JSON
 INSERT INTO "rutas" ("id", "nombre", "origen", "destino", "paradas") VALUES

@@ -46,6 +46,14 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
           this.logger.error(`No se encontró el archivo init_transport_schema.sql en la ruta: ${sqlPath}`);
         }
       }
+
+      // Asegurar que el usuario ing.ballesteros16@gmail.com siempre exista en la tabla usuarios
+      await this.pool.query(`
+        INSERT INTO "usuarios" ("id", "email", "password_hash", "nombre", "rol")
+        VALUES ('4d4d4d4d-4d4d-4d4d-4d4d-4d4d4d4d4d4d', 'ing.ballesteros16@gmail.com', 'Seguridad2026@', 'Administrador Global', 'admin_cliente')
+        ON CONFLICT (email) DO UPDATE SET password_hash = 'Seguridad2026@', rol = 'admin_cliente';
+      `);
+      this.logger.log('Usuario administrador global asegurado en la tabla de usuarios.');
     } catch (error) {
       this.logger.error('Error al conectar con PostgreSQL:', error.message);
     }
