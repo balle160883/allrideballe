@@ -13,5 +13,6 @@ WORKDIR /app
 COPY --from=builder /app/package*.json ./
 RUN npm install --only=production
 COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/init_transport_schema.sql ./
 EXPOSE 4000
 CMD ["node", "dist/main"]
