@@ -127,8 +127,8 @@ export default function DashboardPage() {
         )}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 px-2">
           <div>
-            <h1 className="text-2xl lg:text-3xl font-extrabold text-slate-900 tracking-tight">Dashboard de Cobranza</h1>
-            <p className="text-slate-500 font-medium text-sm lg:text-base">Panel SaaS de alto rendimiento para gestión de despachos.</p>
+            <h1 className="text-2xl lg:text-3xl font-extrabold text-slate-900 tracking-tight">Dashboard Pro Mobile</h1>
+            <p className="text-slate-500 font-medium text-sm lg:text-base">Panel SaaS de alto rendimiento para gestión de rutas y transporte.</p>
           </div>
           <div className="flex flex-wrap items-center gap-4">
             {isAdmin && (

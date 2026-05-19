@@ -109,7 +109,7 @@ export default function GestionesPage() {
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Historial de Gestiones</h1>
-          <p className="text-slate-500 text-sm">Registro cronológico de actividades de cobranza y contacto.</p>
+          <p className="text-slate-500 text-sm">Registro cronológico de actividades de abordaje y contacto.</p>
         </div>
         
         <div className="flex flex-wrap items-center gap-3">
@@ -234,7 +234,7 @@ export default function GestionesPage() {
                       item.tipo_gestion === 'Llamada' ? 'bg-blue-400' : 
                       item.tipo_gestion === 'Visita' ? 'bg-emerald-400' : 'bg-purple-400'
                     }`}></span>
-                    <div className="font-bold text-slate-900">{item.tipo_gestion} de Cobranza</div>
+                    <div className="font-bold text-slate-900">{item.tipo_gestion} de Abordaje</div>
                   </div>
                   <time className="font-bold text-blue-600 text-[10px] bg-blue-50 px-2 py-0.5 rounded-full uppercase tracking-wider">
                     {new Date(item.fecha_gestion).toLocaleString('es-MX', { 

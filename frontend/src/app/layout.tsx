@@ -5,8 +5,8 @@ import { ClientLayout } from "@/components/ClientLayout";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata = {
-  title: "GC Cobranza Pro",
-  description: "Sistema de Cobranza Especializado",
+  title: "Pro Mobile",
+  description: "Sistema de Rutas y Abordaje Pro Mobile",
 };
 
 export default function RootLayout({

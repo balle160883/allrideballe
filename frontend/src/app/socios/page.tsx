@@ -180,7 +180,7 @@ export default function SociosPage() {
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Directorio de Socios</h1>
-          <p className="text-slate-500 text-sm">Administración y seguimiento de la fuerza de cobranza.</p>
+          <p className="text-slate-500 text-sm">Administración y seguimiento de la fuerza de transporte.</p>
         </div>
         <div className="flex items-center gap-4">
           {isAdmin && (
@@ -566,7 +566,7 @@ export default function SociosPage() {
                             <div className="p-1.5 bg-blue-50 text-blue-600 rounded-lg">
                               {h.tipo_gestion === 'Visita' ? <MapPin size={14} /> : h.tipo_gestion === 'Llamada' ? <Phone size={14} /> : <MessageSquare size={14} />}
                             </div>
-                            <span className="text-xs font-black text-slate-900 uppercase tracking-tight">{h.tipo_gestion} de Cobranza</span>
+                            <span className="text-xs font-black text-slate-900 uppercase tracking-tight">{h.tipo_gestion} de Abordaje</span>
                           </div>
                           <span className="text-[10px] font-bold text-slate-400">{new Date(h.fecha_gestion).toLocaleString()}</span>
                         </div>

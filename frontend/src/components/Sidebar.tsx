@@ -88,9 +88,9 @@ export function Sidebar({ isOpen, onClose }: { isOpen?: boolean, onClose?: () =>
         `}>
           <div className="p-8 flex items-center justify-between">
             <h1 className="text-xl font-black tracking-tighter text-white">
-              GC Cobranza
+              Pro Mobile
               <span className="block text-[10px] text-blue-400 font-bold tracking-widest uppercase mt-1">
-                Fintech Edition
+                Transporte & Rutas
               </span>
             </h1>
             {/* Botón de cerrar para móvil */}

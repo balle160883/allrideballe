@@ -29,8 +29,8 @@ export default function LoginPage() {
     <div className="min-h-screen bg-[#0f172a] flex items-center justify-center p-4 font-sans">
       <div className="max-w-md w-full bg-[#1e293b] rounded-2xl shadow-2xl border border-slate-700 p-8 space-y-8">
         <div className="text-center">
-          <h1 className="text-3xl font-bold text-white mb-2">GC Cobranza Pro</h1>
-          <p className="text-slate-400">Fintech Edition - Acceso Gestores</p>
+          <h1 className="text-3xl font-bold text-white mb-2">Pro Mobile</h1>
+          <p className="text-slate-400">Gestión de Rutas y Abordaje</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-6">
@@ -75,8 +75,8 @@ export default function LoginPage() {
 
         <div className="pt-4 text-center">
           <p className="text-xs text-slate-500">
-            Sistema de Cobranza Especializado v2.0<br/>
-            © 2026 Cajas Populares S.XXI
+            Sistema de Transporte y Control v2.0<br/>
+            © 2026 Pro Mobile AllRide
           </p>
         </div>
       </div>
