@@ -1,0 +1,39 @@
+# Dependency directories
+node_modules/
+
+# Next.js build outputs
+.next/
+out/
+
+# NestJS build outputs
+dist/
+
+# Expo / React Native build outputs
+.expo/
+web-build/
+
+# IDE files
+.vscode/
+.idea/
+
+# Environment files
+.env
+.env.local
+.env.production
+.env.development
+.env.*.local
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Large archives and local backups
+*.tar.gz
+*.zip
+*.tgz
+*.rar
+*.7z
+*.pem
+*.xlsx
+*.xlsx.temp
+*.log

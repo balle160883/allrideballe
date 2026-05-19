@@ -1,0 +1,17 @@
+{
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal"
+    },
+    "preview": {
+      "android": {
+        "buildType": "apk"
+      },
+      "env": {
+        "RNMAPBOX_MAPS_DOWNLOAD_TOKEN": "sk.eyJ1IjoiZGpiYjE2MDg4MyIsImEiOiJjbW4zbHIwMjIxZmpjMnFxNTAxZnJocjJvIn0.4KTjlG24u7uB1SHd1OzA7g"
+      }
+    },
+    "production": {}
+  }
+}
