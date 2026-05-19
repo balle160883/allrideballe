@@ -8,12 +8,12 @@ DROP TABLE IF EXISTS "socios_datos" CASCADE;
 DROP TABLE IF EXISTS "ubicaciones_gestores" CASCADE;
 DROP TABLE IF EXISTS "usuarios_gestor" CASCADE;
 
--- 2. Crear extensión para UUID si no existe
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+-- 2. Crear extensión para UUID si no existe (Omitido para evitar problemas de permisos, usando gen_random_uuid)
+-- CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 -- 3. Crear tabla de usuarios con nuevos roles
 CREATE TABLE "usuarios" (
-    "id" UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    "id" UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     "email" VARCHAR(255) UNIQUE NOT NULL,
     "password_hash" VARCHAR(255) NOT NULL,
     "nombre" VARCHAR(255) NOT NULL,

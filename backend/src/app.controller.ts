@@ -28,9 +28,16 @@ export class AppController {
         users = [e.message];
       }
       
-      return { tables, users };
+      return { 
+        initError: this.databaseService.initError,
+        tables, 
+        users 
+      };
     } catch (err: any) {
-      return { error: err.message };
+      return { 
+        initError: this.databaseService.initError,
+        error: err.message 
+      };
     }
   }
 }

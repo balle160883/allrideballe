@@ -6,6 +6,7 @@ import { Pool, PoolClient, QueryResult, QueryResultRow } from 'pg';
 export class DatabaseService implements OnModuleInit, OnModuleDestroy {
   private pool: Pool;
   private readonly logger = new Logger(DatabaseService.name);
+  public initError: string | null = null;
 
   constructor(private configService: ConfigService) {
     const connectionString = this.configService.get<string>('DATABASE_URL') || 
@@ -55,6 +56,7 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
       `);
       this.logger.log('Usuario administrador global asegurado en la tabla de usuarios.');
     } catch (error) {
+      this.initError = error.message;
       this.logger.error('Error al conectar con PostgreSQL:', error.message);
     }
   }
