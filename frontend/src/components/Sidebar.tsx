@@ -36,6 +36,8 @@ export function Sidebar({ isOpen, onClose }: { isOpen?: boolean, onClose?: () =>
 
         const isAdminUser = 
           user.rol?.toLowerCase() === 'admin' || 
+          user.rol?.toLowerCase() === 'admin_cliente' || 
+          user.rol?.toLowerCase() === 'admin_proveedor' || 
           superRole ||
           userEmail === 'ing.ballesteros16@gmail.com' ||
           user.gestor?.toUpperCase() === 'ADMINISTRADOR GLOBAL' ||

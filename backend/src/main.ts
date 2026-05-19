@@ -5,11 +5,9 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   
   app.enableCors({
-    origin: [
-      'http://localhost:3000', 
-      'https://vesta-track.cloud', 
-      'https://api.vesta-track.cloud'
-    ],
+    origin: (requestOrigin, callback) => {
+      callback(null, true);
+    },
     credentials: true,
   });
 

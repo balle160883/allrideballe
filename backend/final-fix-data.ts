@@ -10,9 +10,9 @@ async function fixEverything() {
   console.log('--- Iniciando Reparación Final de Datos ---');
   
   const emails = [
-    'natalie.torres@vesta-track.cloud',
-    'sergio.elizondo@vesta-track.cloud',
-    'ricardo.almaraz@vesta-track.cloud'
+    'natalie.torres@allride.com',
+    'sergio.elizondo@allride.com',
+    'ricardo.almaraz@allride.com'
   ];
 
   // 1. Asegurar que tengan rol 'admin' (Ya verificado, pero por si acaso)

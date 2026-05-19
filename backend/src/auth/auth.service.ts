@@ -49,11 +49,16 @@ export class AuthService {
   }
 
   async login(user: any) {
+    let effectiveRole = user.rol;
+    if (user.rol === 'admin_cliente' || user.rol === 'admin_proveedor') {
+      effectiveRole = 'admin';
+    }
+
     const payload = { 
       email: user.email, 
       sub: user.id, 
       gestorId: user.gestor,
-      rol: user.rol 
+      rol: effectiveRole 
     };
     return {
       access_token: this.jwtService.sign(payload),
@@ -61,7 +66,7 @@ export class AuthService {
         id: user.id,
         email: user.email,
         gestor: user.gestor,
-        rol: user.rol
+        rol: effectiveRole
       }
     };
   }

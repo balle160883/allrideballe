@@ -5,7 +5,7 @@ const serviceKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSI
 const options = {
   hostname: 'xygarchwyrflpzywcpid.supabase.co',
   port: 443,
-  path: '/rest/v1/usuarios_gestor?email=eq.superadmin@vesta-track.cloud',
+  path: '/rest/v1/usuarios_gestor?email=eq.superadmin@allride.com',
   method: 'GET',
   headers: {
     'apikey': serviceKey,

@@ -21,10 +21,10 @@ async function checkAndFixRentas() {
   
   // 2. Usuarios que necesitan acceso
   const emails = [
-    'natalie.torres@vesta-track.cloud',
-    'sergio.elizondo@vesta-track.cloud',
-    'ricardo.almaraz@vesta-track.cloud',
-    'sergio.elizondo@vesta-track.cloud'
+    'natalie.torres@allride.com',
+    'sergio.elizondo@allride.com',
+    'ricardo.almaraz@allride.com',
+    'sergio.elizondo@allride.com'
   ];
   
   for (const email of emails) {

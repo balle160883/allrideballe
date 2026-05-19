@@ -46,7 +46,10 @@ export default function DashboardPage() {
     try {
       const parsedUser = JSON.parse(userInfo);
       setUser(parsedUser);
-      const admin = parsedUser.rol === 'admin';
+      const admin = 
+        parsedUser.rol === 'admin' || 
+        parsedUser.rol === 'admin_cliente' || 
+        parsedUser.rol === 'admin_proveedor';
       setIsAdmin(admin);
 
       if (admin) {

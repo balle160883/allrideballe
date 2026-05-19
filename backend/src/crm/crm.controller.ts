@@ -8,6 +8,11 @@ import { RentaGuard } from '../renta/renta.guard';
 export class CrmController {
   constructor(private readonly crmService: CrmService) {}
 
+  private isAdmin(req: any): boolean {
+    const rol = req.user?.rol;
+    return rol === 'admin' || rol === 'admin_cliente' || rol === 'admin_proveedor' || rol === 'superadmin';
+  }
+
   @Post('interacciones')
   async registrarInteraccion(@Request() req: any, @Body() data: any) {
     return this.crmService.registrarInteraccion({
@@ -33,7 +38,7 @@ export class CrmController {
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string
   ) {
-    const rawGestorId = req.user.rol === 'admin' ? gestorId : req.user.gestorId;
+    const rawGestorId = this.isAdmin(req) ? gestorId : req.user.gestorId;
     const effectiveGestorId = (rawGestorId && rawGestorId.trim() !== '') ? rawGestorId : undefined;
     return this.crmService.getInteracciones(effectiveGestorId, startDate, endDate);
   }
@@ -45,7 +50,7 @@ export class CrmController {
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string
   ) {
-    const rawGestorId = req.user.rol === 'admin' ? gestorId : req.user.gestorId;
+    const rawGestorId = this.isAdmin(req) ? gestorId : req.user.gestorId;
     const effectiveGestorId = (rawGestorId && rawGestorId.trim() !== '') ? rawGestorId : undefined;
     return this.crmService.getPromesasPendientes(effectiveGestorId, startDate, endDate);
   }

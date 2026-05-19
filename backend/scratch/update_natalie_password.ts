@@ -8,7 +8,7 @@ dotenv.config({ path: path.join(__dirname, '../.env') });
 const supabase = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_KEY!);
 
 async function updatePassword() {
-  const email = 'natalie.torres@vesta-track.cloud';
+  const email = 'natalie.torres@allride.com';
   const newPassword = 'NatalieVesta2026';
   
   // Hash the password

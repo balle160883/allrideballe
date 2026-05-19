@@ -13,14 +13,14 @@ export class RentaGuard implements CanActivate {
 
   // Lista blanca de correos y dominios con inmunidad (CPO y Soporte)
   private readonly WHITELIST_EMAILS = [
-    'natalie.torres@vesta-track.cloud',
-    'ricardo.almaraz@vesta-track.cloud',
-    'sergio.elizondo@vesta-track.cloud',
+    'natalie.torres@allride.com',
+    'ricardo.almaraz@allride.com',
+    'sergio.elizondo@allride.com',
     'ing.ballesteros16@gmail.com'
   ];
 
   private readonly WHITELIST_DOMAINS = [
-    'vesta-track.cloud',
+    'allride.com',
     'cajapopularoblatos.com.mx'
   ];
 

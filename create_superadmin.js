@@ -1,7 +1,7 @@
 const https = require('https');
 
 const data = JSON.stringify({
-  email: 'superadmin@vesta-track.cloud',
+  email: 'superadmin@allride.com',
   password_hash: 'admin2026',
   rol: 'superadmin',
   gestor: 'SUPERADMIN'

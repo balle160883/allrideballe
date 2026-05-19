@@ -4,7 +4,7 @@ import * as path from 'path';
 
 dotenv.config({ path: path.join(__dirname, '.env') });
 
-const API_URL = 'https://api.vesta-track.cloud'; // Usamos la URL de producción
+const API_URL = 'https://api.allride.com'; // Usamos la URL de producción
 // O mejor, usamos el puerto local si tenemos acceso
 // Pero no tengo acceso al puerto local del servidor de AWS directamente.
 // Sin embargo, puedo ejecutar el código EN el servidor de AWS.
@@ -61,4 +61,4 @@ async function testAsAdmin(email: string) {
 }
 
 // Probamos con Natalie
-testAsAdmin('natalie.torres@vesta-track.cloud');
+testAsAdmin('natalie.torres@allride.com');

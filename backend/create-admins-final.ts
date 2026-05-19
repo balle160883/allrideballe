@@ -8,19 +8,19 @@ const supabase = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_KE
 
 const admins = [
   {
-    email: 'sergio.elizondo@vesta-track.cloud',
+    email: 'sergio.elizondo@allride.com',
     password_hash: 'SergioVesta2026!',
     rol: 'admin',
     gestor: 'SERGIO ELIZONDO'
   },
   {
-    email: 'ricardo.almaraz@vesta-track.cloud',
+    email: 'ricardo.almaraz@allride.com',
     password_hash: 'RicardoVesta2026!',
     rol: 'admin',
     gestor: 'RICARDO ALMARAZ'
   },
   {
-    email: 'natalie.torres@vesta-track.cloud',
+    email: 'natalie.torres@allride.com',
     password_hash: 'NatalieVesta2026!',
     rol: 'admin',
     gestor: 'NATALIE TORRES'

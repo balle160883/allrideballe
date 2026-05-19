@@ -42,7 +42,11 @@ export default function HistoricoPage() {
       try {
         const parsed = JSON.parse(userInfo);
         setUser(parsed);
-        setIsAdmin(parsed.rol === 'admin');
+        setIsAdmin(
+          parsed.rol === 'admin' || 
+          parsed.rol === 'admin_cliente' || 
+          parsed.rol === 'admin_proveedor'
+        );
       } catch (e) {
         console.error("Error parsing user info:", e);
       }

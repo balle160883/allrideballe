@@ -50,9 +50,14 @@ export default function SociosPage() {
 
     const parsedUser = JSON.parse(userInfo);
     setUser(parsedUser);
-    setIsAdmin(parsedUser.rol === 'admin');
+    
+    const isAdminUser = 
+      parsedUser.rol === 'admin' || 
+      parsedUser.rol === 'admin_cliente' || 
+      parsedUser.rol === 'admin_proveedor';
+    setIsAdmin(isAdminUser);
 
-    if (parsedUser.rol === 'admin') {
+    if (isAdminUser) {
       fetchAllGestores().then(setGestores).catch(console.error);
     }
   }, [router]);

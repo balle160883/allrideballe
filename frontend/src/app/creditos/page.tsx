@@ -16,7 +16,11 @@ export default function CreditosPage() {
     const userInfo = localStorage.getItem('user_info');
     if (userInfo) {
       const user = JSON.parse(userInfo);
-      setIsAdmin(user.rol === 'admin');
+      setIsAdmin(
+        user.rol === 'admin' || 
+        user.rol === 'admin_cliente' || 
+        user.rol === 'admin_proveedor'
+      );
     }
   }, []);
 

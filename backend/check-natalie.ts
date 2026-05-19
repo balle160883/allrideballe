@@ -10,7 +10,7 @@ async function checkUser() {
   const { data, error } = await supabase
     .from('usuarios_gestor')
     .select('*')
-    .eq('email', 'natalie.torres@vesta-track.cloud');
+    .eq('email', 'natalie.torres@allride.com');
   
   if (error) {
     console.error(error);
