@@ -1,4 +1,17 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.allride.com';
+let API_URL = process.env.NEXT_PUBLIC_API_URL;
+
+if (!API_URL && typeof window !== 'undefined') {
+  const { protocol, hostname } = window.location;
+  if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname.match(/^\d+\.\d+\.\d+\.\d+$/)) {
+    API_URL = `${protocol}//${hostname}:4000`;
+  } else {
+    API_URL = `${protocol}//api.${hostname.replace(/^(app|www)\./, '')}`;
+  }
+}
+
+if (!API_URL) {
+  API_URL = 'https://api.allride.com';
+}
 
 function getAuthHeader(): Record<string, string> {
   if (typeof window !== 'undefined') {
