@@ -3,26 +3,28 @@
 import React, { useEffect, useRef, useState } from 'react';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
-import { fetchGestoresLocations } from '@/lib/api';
-import { MapPin, User, Clock, Navigation } from 'lucide-react';
+import { fetchLatestLocations } from '@/lib/api';
+import { MapPin, User, Clock, Navigation, Bus, Route } from 'lucide-react';
 
-// Token de Mapbox (extraído de .env)
+// Token de Mapbox
 const MAPBOX_TOKEN = 'pk.eyJ1IjoiZGpiYjE2MDg4MyIsImEiOiJjbW4zY2o0dTUwOGdxMnFvYmJwZ2xzbnUwIn0.Yv7408j9tAieaX-YB-vAwg';
 
-interface GestorLocation {
-  id: string;
-  gestor_id: string;
+interface VehicleLocation {
+  viaje_id: number;
   latitud: number;
   longitud: number;
+  velocidad: number;
   timestamp: string;
-  gestor_name: string;
+  ruta_nombre: string;
+  patente: string;
+  conductor_nombre: string;
 }
 
-export default function GestoresMapaPage() {
+export default function FleetMapPage() {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
-  const markers = useRef<Map<string, mapboxgl.Marker>>(new Map());
-  const [locations, setLocations] = useState<GestorLocation[]>([]);
+  const markers = useRef<Map<number, mapboxgl.Marker>>(new Map());
+  const [locations, setLocations] = useState<VehicleLocation[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -33,19 +35,19 @@ export default function GestoresMapaPage() {
     map.current = new mapboxgl.Map({
       container: mapContainer.current,
       style: 'mapbox://styles/mapbox/dark-v11', // Estilo premium oscuro
-      center: [-102.5528, 23.6345], // México central
-      zoom: 5,
+      center: [-103.3496, 20.6736], // Guadalajara / México Occidental por defecto
+      zoom: 11,
     });
 
     map.current.addControl(new mapboxgl.NavigationControl(), 'top-right');
 
     const updateLocations = async () => {
       try {
-        const data = await fetchGestoresLocations();
+        const data = await fetchLatestLocations();
         setLocations(data);
         
         if (data.length > 0 && map.current) {
-          // Ajustar el mapa al primer gestor si es la primera vez
+          // Ajustar el mapa al primer vehículo activo si es la primera carga
           if (loading) {
              map.current.flyTo({
                center: [data[0].longitud, data[0].latitud],
@@ -53,34 +55,47 @@ export default function GestoresMapaPage() {
              });
           }
 
+          // Eliminar marcadores viejos que ya no están activos
+          const activeIds = new Set(data.map(d => d.viaje_id));
+          markers.current.forEach((marker, id) => {
+            if (!activeIds.has(id)) {
+              marker.remove();
+              markers.current.delete(id);
+            }
+          });
+
           // Actualizar/Crear marcadores
-          data.forEach((loc: GestorLocation) => {
-            const existingMarker = markers.current.get(loc.gestor_id);
+          data.forEach((loc: VehicleLocation) => {
+            const existingMarker = markers.current.get(loc.viaje_id);
             
             if (existingMarker) {
               existingMarker.setLngLat([loc.longitud, loc.latitud]);
             } else {
-              // Crear un elemento personalizado para el marcador (premium look)
+              // Crear un elemento personalizado para el marcador
               const el = document.createElement('div');
               el.className = 'marker';
-              el.style.width = '40px';
-              el.style.height = '40px';
+              el.style.width = '42px';
+              el.style.height = '42px';
               el.style.borderRadius = '50%';
-              el.style.backgroundColor = '#3b82f6'; // Blue-500
+              el.style.backgroundColor = '#2563eb'; // Blue-600
               el.style.border = '3px solid white';
-              el.style.boxShadow = '0 0 15px rgba(59, 130, 246, 0.5)';
+              el.style.boxShadow = '0 0 15px rgba(37, 99, 235, 0.6)';
               el.style.display = 'flex';
               el.style.alignItems = 'center';
               el.style.justifyContent = 'center';
               el.style.cursor = 'pointer';
-              el.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>';
+              el.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M14 16H10"/><path d="M4 16v4"/><path d="M20 16v4"/><path d="M12 4v12"/></svg>';
 
               const popup = new mapboxgl.Popup({ offset: 25 })
                 .setHTML(`
-                  <div style="color: #1e293b; padding: 5px;">
-                    <h3 style="font-weight: bold; margin-bottom: 5px;">${loc.gestor_name}</h3>
-                    <p style="font-size: 12px; margin: 0;">Última conexión:</p>
-                    <p style="font-size: 12px; color: #64748b;">${new Date(loc.timestamp).toLocaleString()}</p>
+                  <div style="color: #0f172a; padding: 6px; font-family: sans-serif; min-width: 180px;">
+                    <h3 style="font-weight: 800; font-size: 13px; margin: 0 0 4px 0; color: #1e3a8a;">${loc.ruta_nombre || 'Ruta sin nombre'}</h3>
+                    <p style="font-size: 11px; font-weight: 600; margin: 0 0 2px 0; color: #475569;">Unidad: ${loc.patente}</p>
+                    <p style="font-size: 11px; font-weight: 600; margin: 0 0 6px 0; color: #475569;">Chofer: ${loc.conductor_nombre || 'No asignado'}</p>
+                    <div style="display: flex; justify-content: space-between; align-items: center; border-t: 1px solid #e2e8f0; pt: 4px; font-size: 10px; color: #94a3b8; font-weight: bold;">
+                      <span>Vel: ${loc.velocidad || 0} km/h</span>
+                      <span>${new Date(loc.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                    </div>
                   </div>
                 `);
 
@@ -89,18 +104,18 @@ export default function GestoresMapaPage() {
                 .setPopup(popup)
                 .addTo(map.current!);
               
-              markers.current.set(loc.gestor_id, marker);
+              markers.current.set(loc.viaje_id, marker);
             }
           });
         }
         setLoading(false);
       } catch (error) {
-        console.error('Error updating locations:', error);
+        console.error('Error updating live fleet locations:', error);
       }
     };
 
     updateLocations();
-    const interval = setInterval(updateLocations, 30000); // Actualizar cada 30 segundos
+    const interval = setInterval(updateLocations, 10000); // Actualizar cada 10 segundos
 
     return () => {
       clearInterval(interval);
@@ -110,46 +125,49 @@ export default function GestoresMapaPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 px-2">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
-            <MapPin className="text-blue-500" />
-            Geolocalización de Gestores
+          <h1 className="text-2xl lg:text-3xl font-extrabold text-slate-900 tracking-tight flex items-center gap-2">
+            <MapPin className="text-blue-600" size={32} />
+            Mapa en Vivo
           </h1>
-          <p className="text-slate-500">Monitoreo en tiempo real del personal de campo</p>
+          <p className="text-slate-500 font-medium text-sm lg:text-base">Localización GPS y estado de tránsito de la flota de buses de personal en tiempo real.</p>
         </div>
-        <div className="bg-blue-50 text-blue-700 px-4 py-2 rounded-full text-sm font-medium flex items-center gap-2 border border-blue-100">
+        <div className="bg-blue-50 text-blue-700 px-4 py-2 rounded-full text-xs font-black uppercase tracking-wider flex items-center gap-2 border border-blue-100 shadow-sm">
           <Navigation size={16} className="animate-pulse" />
-          {locations.length} gestores activos ahora
+          {locations.length} unidades en tránsito
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 h-[700px]">
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 h-[650px]">
         {/* Panel lateral de lista */}
-        <div className="lg:col-span-1 bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden flex flex-col">
-          <div className="p-4 border-b border-slate-50 bg-slate-50/50">
-            <h2 className="font-semibold text-slate-800">Lista de Gestores</h2>
+        <div className="lg:col-span-1 bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col">
+          <div className="p-4 border-b border-slate-100 bg-slate-50">
+            <h2 className="font-extrabold text-xs uppercase text-slate-400 tracking-wider">Flota en Ruta</h2>
           </div>
           <div className="flex-1 overflow-y-auto p-2 space-y-2">
             {loading ? (
-              <div className="p-4 text-center text-slate-400">Cargando gestores...</div>
+              <div className="p-4 text-center text-slate-400 font-medium">Cargando flota...</div>
             ) : locations.length === 0 ? (
-              <div className="p-4 text-center text-slate-400">No hay gestores con ubicación disponible.</div>
+              <div className="p-8 text-center text-slate-400 font-medium text-sm">
+                No hay viajes en tránsito transmitiendo coordenadas GPS.
+              </div>
             ) : (
               locations.map((loc) => (
                 <button
-                  key={loc.gestor_id}
+                  key={loc.viaje_id}
                   onClick={() => map.current?.flyTo({ center: [loc.longitud, loc.latitud], zoom: 15 })}
-                  className="w-full p-3 rounded-xl hover:bg-slate-50 transition-colors text-left flex items-start gap-3 border border-transparent hover:border-slate-100"
+                  className="w-full p-3 rounded-xl hover:bg-slate-50 border border-transparent hover:border-slate-100 transition-all text-left flex items-start gap-3"
                 >
-                  <div className="bg-blue-100 p-2 rounded-lg text-blue-600">
-                    <User size={18} />
+                  <div className="bg-blue-100 p-2.5 rounded-xl text-blue-600">
+                    <Bus size={18} />
                   </div>
                   <div className="flex-1 overflow-hidden">
-                    <p className="font-medium text-slate-900 truncate">{loc.gestor_name}</p>
-                    <div className="flex items-center gap-1.6 text-xs text-slate-500 mt-1">
+                    <p className="font-extrabold text-slate-900 truncate leading-snug">{loc.ruta_nombre}</p>
+                    <p className="text-xs text-slate-500 font-bold mt-0.5">Unidad: {loc.patente} ({loc.velocidad || 0} km/h)</p>
+                    <div className="flex items-center gap-1.5 text-[10px] font-semibold text-slate-400 mt-1">
                       <Clock size={12} />
-                      {new Date(loc.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      Reporte: {new Date(loc.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </div>
                   </div>
                 </button>
@@ -159,12 +177,11 @@ export default function GestoresMapaPage() {
         </div>
 
         {/* Mapa */}
-        <div className="lg:col-span-3 bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden relative group">
+        <div className="lg:col-span-3 bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden relative">
           <div ref={mapContainer} className="w-full h-full" />
           
-          {/* Badge flotante premium */}
-          <div className="absolute top-4 left-4 bg-white/90 backdrop-blur-md px-3 py-1.5 rounded-lg border border-white/20 shadow-lg text-[10px] font-bold uppercase tracking-wider text-slate-500 z-10 pointer-events-none">
-            Mapbox High-Precision Engine
+          <div className="absolute top-4 left-4 bg-white/90 backdrop-blur-md px-3 py-1.5 rounded-lg border border-white/20 shadow-lg text-[10px] font-black uppercase tracking-wider text-slate-500 z-10 pointer-events-none">
+            SaaS GPS Engine
           </div>
           
           {loading && (
@@ -186,15 +203,15 @@ export default function GestoresMapaPage() {
           transform: scale(1.15);
         }
         .mapboxgl-popup-content {
-          border-radius: 12px;
-          padding: 10px;
-          box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
-          border: 1px solid rgba(0, 0, 0, 0.05);
+          border-radius: 16px !important;
+          padding: 12px !important;
+          box-shadow: 0 12px 20px -3px rgba(0, 0, 0, 0.12) !important;
+          border: 1px solid rgba(0, 0, 0, 0.05) !important;
         }
         .mapboxgl-popup-close-button {
-          padding: 4px;
-          right: 4px;
-          top: 4px;
+          padding: 6px !important;
+          right: 6px !important;
+          top: 6px !important;
         }
       `}</style>
     </div>

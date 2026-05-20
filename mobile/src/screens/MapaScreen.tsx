@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, Alert, Platform, Linking, ActivityIndicator } from 'react-native';
+import { StyleSheet, View, Text, TouchableOpacity, Alert, Linking, ActivityIndicator } from 'react-native';
 import { Colors, Spacing } from '../constants/theme';
 import Mapbox from '@rnmapbox/maps';
 import { useVisitas, Visita } from '../hooks/useVisitas';
@@ -45,15 +45,11 @@ export default function MapaScreen({ navigation }: any) {
   };
 
   const startTurnByTurn = async (visita: Visita) => {
-    const { latitud, longitud, domicilio, colonia } = visita;
+    const lat = visita.latitud || 20.6736;
+    const lng = visita.longitud || -103.3496;
     
-    const wazeUrl = latitud && longitud 
-      ? `https://waze.com/ul?ll=${latitud},${longitud}&navigate=yes`
-      : `https://waze.com/ul?q=${encodeURIComponent(`${domicilio}, ${colonia || ''}`)}&navigate=yes`;
-
-    const googleMapsUrl = latitud && longitud
-      ? `https://www.google.com/maps/search/?api=1&query=${latitud},${longitud}`
-      : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${domicilio}, ${colonia || ''}`)}`;
+    const wazeUrl = `https://waze.com/ul?ll=${lat},${lng}&navigate=yes`;
+    const googleMapsUrl = `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
 
     try {
       const canOpenWaze = await Linking.canOpenURL('waze://');
@@ -69,17 +65,17 @@ export default function MapaScreen({ navigation }: any) {
 
   return (
     <View style={styles.container}>
-      <Mapbox.MapView style={styles.map} logoEnabled={false} attributionEnabled={false} styleURL={Mapbox.StyleURL.Light}>
+      <Mapbox.MapView style={styles.map} logoEnabled={false} attributionEnabled={false} styleURL={Mapbox.StyleURL.Dark}>
         <Mapbox.Camera
           ref={cameraRef}
           zoomLevel={userLocation ? 12 : 5}
-          centerCoordinate={userLocation || [-102.5528, 23.6345]}
+          centerCoordinate={userLocation || [-103.3496, 20.6736]}
           followUserLocation={!selectedVisita && !!userLocation}
         />
         
         <Mapbox.UserLocation />
 
-        {/* Marcadores Reales */}
+        {/* Marcadores de Viajes */}
         {visitas.map((v) => (
            v.latitud && v.longitud ? (
              <Mapbox.MarkerView
@@ -92,9 +88,9 @@ export default function MapaScreen({ navigation }: any) {
                  onPress={() => handleSelectVisita(v)}
                >
                   <MaterialCommunityIcons 
-                    name="map-marker" 
-                    size={36} 
-                    color={v.tipo === 'Socio' ? Colors.primary : Colors.accent} 
+                    name="bus" 
+                    size={32} 
+                    color={v.situacion === 'en_progreso' ? Colors.success : Colors.primary} 
                   />
                </TouchableOpacity>
              </Mapbox.MarkerView>
@@ -120,14 +116,14 @@ export default function MapaScreen({ navigation }: any) {
       {selectedVisita && (
         <View style={styles.visitaInfo}>
            <View style={styles.visitaHeader}>
-              <Text style={styles.visitaTipo}>{selectedVisita.tipo}</Text>
+              <Text style={styles.visitaTipo}>Servicio de Transporte</Text>
               <TouchableOpacity onPress={handleCloseDetail}>
                  <MaterialCommunityIcons name="close" size={24} color={Colors.textMuted} />
               </TouchableOpacity>
            </View>
            <Text style={styles.visitaNombre}>{selectedVisita.nombre}</Text>
-           <Text style={styles.visitaColonia}>Colonia: {selectedVisita.colonia}</Text>
-           <Text style={styles.visitaMora}>Mora: ${selectedVisita.saldoAlDia.toFixed(2)}</Text>
+           <Text style={styles.visitaColonia}>Destino: {selectedVisita.colonia}</Text>
+           <Text style={styles.visitaMora}>Chofer: {selectedVisita.nombreSocio}</Text>
            
            <View style={styles.actionButtons}>
               <TouchableOpacity 
@@ -146,10 +142,13 @@ export default function MapaScreen({ navigation }: any) {
 
               <TouchableOpacity 
                 style={[styles.navButton, { backgroundColor: Colors.success, flex: 2 }]} 
-                onPress={() => navigation.navigate('VisitasTab', { screen: 'DetalleVisita', params: { visita: selectedVisita } })}
+                onPress={() => {
+                  handleCloseDetail();
+                  navigation.navigate('VisitasTab', { screen: 'DetalleVisita', params: { visita: selectedVisita } });
+                }}
               >
                 <MaterialCommunityIcons name="clipboard-text-outline" color="#fff" size={20} />
-                <Text style={styles.navButtonText}>Realizar Gestión</Text>
+                <Text style={styles.navButtonText}>Detalles del Viaje</Text>
               </TouchableOpacity>
            </View>
         </View>
@@ -157,7 +156,7 @@ export default function MapaScreen({ navigation }: any) {
 
       {!selectedVisita && (
          <View style={styles.legend}>
-            <Text style={styles.legendText}>{visitas.length} visitas disponibles</Text>
+            <Text style={styles.legendText}>{visitas.length} viajes registrados en el sistema</Text>
          </View>
       )}
     </View>
@@ -173,10 +172,19 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   marker: {
-    width: 40,
-    height: 40,
+    width: 44,
+    height: 44,
+    backgroundColor: 'white',
+    borderRadius: 22,
+    borderWidth: 2,
+    borderColor: Colors.primary,
     justifyContent: 'center',
     alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
   },
   visitaInfo: {
     position: 'absolute',
@@ -214,10 +222,10 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   visitaMora: {
-    fontSize: 18,
-    color: Colors.error,
+    fontSize: 15,
+    color: Colors.text,
     fontWeight: 'bold',
-    marginTop: 8,
+    marginTop: 4,
   },
   actionButtons: {
     flexDirection: 'row',

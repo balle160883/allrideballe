@@ -29,8 +29,8 @@ export function useProximityAlert(visitas: Visita[], onNavigate: (visita: Visita
             // Si es una visita distinta O ha pasado suficiente tiempo desde la última alerta para la misma visita
             if (!lastAlert || lastAlert.id !== visita.id || (now - lastAlert.time > COOLDOWN_TIME)) {
               Alert.alert(
-                '📍 Visita Cercana',
-                `Te encuentras cerca de ${visita.nombre} en la colonia ${visita.colonia}. ¿Deseas realizar esta visita ahora?`,
+                '📍 Destino Cercano',
+                `Te encuentras cerca de la parada: ${visita.colonia}. ¿Deseas ver los detalles del viaje?`,
                 [{ text: 'Ignorar' }, { text: 'Ver Detalle', onPress: () => onNavigate(visita) }]
               );
               

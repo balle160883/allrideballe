@@ -13,8 +13,13 @@ export default function PerfilScreen() {
         <View style={styles.avatar}>
           <MaterialCommunityIcons name="account" size={40} color={Colors.primary} />
         </View>
-        <Text style={styles.name}>{user?.gestor || 'Gestor'}</Text>
+        <Text style={styles.name}>{user?.gestor || 'Usuario'}</Text>
         <Text style={styles.email}>{user?.email}</Text>
+        {user?.rol && (
+          <View style={styles.roleBadge}>
+            <Text style={styles.roleText}>{user.rol.toUpperCase()}</Text>
+          </View>
+        )}
       </View>
 
       <View style={styles.sectionHeader}>
@@ -132,5 +137,19 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: Colors.error,
+  },
+  roleBadge: {
+    backgroundColor: '#eff6ff',
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 12,
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: '#bfdbfe',
+  },
+  roleText: {
+    color: '#1e40af',
+    fontSize: 12,
+    fontWeight: 'bold',
   },
 });

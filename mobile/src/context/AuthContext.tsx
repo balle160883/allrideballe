@@ -6,6 +6,7 @@ interface User {
   id: string;
   email: string;
   gestor: string;
+  rol: string;
 }
 
 interface AuthContextData {
@@ -74,13 +75,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const userData = {
         id: data.user.id,
         email: data.user.email,
-        gestor: data.user.gestor
+        gestor: data.user.nombre || data.user.gestor || data.user.email,
+        rol: data.user.rol || 'pasajero'
       };
 
       await SecureStore.setItemAsync('auth_token', data.access_token);
       await SecureStore.setItemAsync('user_info', JSON.stringify(userData));
       
-      setUser(userData);
+      setUser(userData as any);
     } catch (error: any) {
        console.error(error);
        throw error;

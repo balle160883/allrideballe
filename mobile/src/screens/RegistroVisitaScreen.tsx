@@ -12,166 +12,57 @@ import {
 import { Colors, Spacing } from '../constants/theme';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { api } from '../api/backend';
-import { useAuth } from '../context/AuthContext';
-import { BluetoothPrinter, TicketType } from '../utils/BluetoothPrinter';
-import { useVisitas } from '../hooks/useVisitas';
-import { OfflineService } from '../utils/OfflineService';
-
 
 export default function RegistroVisitaScreen({ route, navigation }: any) {
-  const { visita: initialVisita } = route.params;
-  const { user } = useAuth();
-  const { visitas } = useVisitas();
+  const { visita, onScanSuccess } = route.params;
   const [loading, setLoading] = useState(false);
-  const [resultado, setResultado] = useState('');
-  const [observaciones, setObservaciones] = useState('');
-  const [montoPromesa, setMontoPromesa] = useState('');
-  const [fechaPromesa, setFechaPromesa] = useState(new Date().toLocaleDateString('es-MX'));
+  const [cardId, setCardId] = useState('');
+  const [reportType, setReportType] = useState('retraso');
+  const [reportDesc, setReportDesc] = useState('');
 
-  // Sincronizamos con los datos en tiempo real si el hook los actualiza
-  const visita = visitas.find(v => v.id === initialVisita.id) || initialVisita;
-
-  const handlePrint = async (tipo: TicketType) => {
-    await BluetoothPrinter.generateTicket({
-      tipo: tipo,
-      nombreSocio: visita.nombre,
-      socioId: visita.socioId,
-      cuenta: visita.numCuenta,
-      saldoAtrasado: visita.saldoAlDia,
-      gestorNombre: user?.gestor || 'Gestor CPO',
-      gestorTelefono: '3339421050 ext. 1110, 1111, 1194',
-      observaciones: observaciones,
-      folioConvenio: tipo === 'promesa' ? `#CV-${Date.now().toString().slice(-6)}` : undefined,
-      nombreAval: visita.tipo.includes('Aval') ? visita.nombre : undefined,
-      titularNombre: visita.tipo.includes('Aval') ? (visita.nombreSocio || 'Titular del Crédito') : undefined,
-      titularSocioId: visita.tipo.includes('Aval') ? visita.socioId : undefined,
-    });
-  };
-
-  const resultados = [
-    { label: 'Abordado QR', value: 'visita_exitosa', icon: 'qrcode-scan' },
-    { label: 'Tarjeta/Físico', value: 'promesa_pago', icon: 'card-bulleted' },
-    { label: 'No Abordó', value: 'no_encontrado', icon: 'account-cancel' },
-    { label: 'Retrasado', value: 'reclamacion', icon: 'bus-alert' },
-    { label: 'Contingencia', value: 'otro', icon: 'alert-decagram' },
-  ];
-
-  const handleSave = async () => {
-    if (!resultado) {
-      Alert.alert('Error', 'Por favor selecciona un resultado del abordaje.');
+  const handleValidateCard = async () => {
+    if (!cardId.trim()) {
+      Alert.alert('Error', 'Por favor ingresa o escanea el ID de la tarjeta del pasajero.');
       return;
-    }
-
-    if (resultado === 'promesa_pago') {
-      if (!montoPromesa || !fechaPromesa) {
-        Alert.alert('Error', 'Para registro físico, el número de asiento y la fecha son obligatorios.');
-        return;
-      }
     }
 
     setLoading(true);
     try {
-      const isOnline = await OfflineService.isOnline();
-
-      // Preparar datos para sincronización (tanto online como offline)
-      const interactionData = {
-        socio_id: visita.socioId,
-        gestor_id: user?.id,
-        num_cuenta: visita.numCuenta,
-        tipo_contacto: 'abordaje',
-        resultado: resultado,
-        descripcion: observaciones,
-        sujeto_tipo: 'Pasajero',
-        fecha_gestion: new Date().toISOString(),
-      };
-
-      // Si es reserva manual
-      let promesaData = null;
-      if (resultado === 'promesa_pago') {
-        const parts = fechaPromesa.split('/');
-        const isoDate = parts.length === 3 ? `${parts[2]}-${parts[1]}-${parts[0]}` : null;
-        promesaData = {
-          monto_prometido: parseFloat(montoPromesa.replace(',', '')),
-          fecha_promesa: isoDate || new Date().toISOString().split('T')[0],
-          estado: 'pendiente'
-        };
-      }
-
-      // Siempre marcamos como VISITADO para que pase a la pestaña de "Completadas"
-      const updateAsignacion = { numCuenta: visita.numCuenta, situacion: 'VISITADO' };
-
-      if (!isOnline) {
-        // MODO OFFLINE: Guardar localmente
-        await OfflineService.saveGestionOffline({
-          interaction: { ...interactionData, prestamo_id: visita.prestamoId },
-          promesa: promesaData,
-          updateAsignacion: updateAsignacion
-        });
-
-        Alert.alert(
-          'Modo Offline', 
-          'No tienes conexión. El abordaje se guardó localmente y se sincronizará automáticamente cuando recuperes señal.',
-          [{ text: 'Entendido', onPress: () => navigation.goBack() }]
-        );
-        return;
-      }
-
-      // MODO ONLINE: Proceder normalmente
-      const interaction = await api.post('/crm/interacciones', {
-        ...interactionData,
-        prestamo_id: visita.prestamoId || null
+      // Registrar abordaje por RFID / ID tarjeta
+      const response = await api.post(`/transporte/viajes/${visita.id}/abordar`, {
+        identificador_tarjeta: cardId.trim()
       });
 
-      if (resultado === 'promesa_pago' && promesaData) {
-        await api.post('/crm/promesas', {
-          ...promesaData,
-          prestamo_id: interaction.prestamo_id || visita.prestamoId,
-          interaccion_id: interaction.id,
-        });
-      }
-
-      // Actualizar asignación
-      if (updateAsignacion) {
-        await api.patch(`/portfolio/asignaciones/${updateAsignacion.numCuenta}`, {
-          'SITUACIÓN DEL CRÉDITO': updateAsignacion.situacion
-        });
-      }
-
-      Alert.alert('Éxito', 'Abordaje registrado correctamente.', [
-        { text: 'Aceptar', onPress: () => navigation.goBack() }
-      ]);
+      Alert.alert('Éxito', `Abordaje confirmado: ${response.reserva.pasajero_nombre} en Asiento #${response.reserva.asiento_numero}`);
+      setCardId('');
+      if (onScanSuccess) onScanSuccess();
+      navigation.goBack();
     } catch (e: any) {
-      console.error(e);
-      Alert.alert(
-        'Error de Red', 
-        'Ocurrió un error al conectar con el servidor. ¿Deseas guardar el registro localmente para reintentar después?',
-        [
-          { text: 'Cancelar', style: 'cancel' },
-          { 
-            text: 'Guardar Offline', 
-            onPress: async () => {
-              await OfflineService.saveGestionOffline({
-                interaction: {
-                  socio_id: visita.socioId,
-                  gestor_id: user?.id,
-                  tipo_contacto: 'abordaje',
-                  resultado: resultado,
-                  descripcion: observaciones,
-                  sujeto_tipo: 'Pasajero',
-                  fecha_gestion: new Date().toISOString(),
-                },
-                promesa: resultado === 'promesa_pago' ? {
-                    monto_prometido: parseFloat(montoPromesa.replace(',', '')),
-                    fecha_promesa: new Date().toISOString(),
-                    estado: 'pendiente'
-                } : undefined,
-                updateAsignacion: { numCuenta: visita.numCuenta, situacion: 'VISITADO' }
-              });
-              navigation.goBack();
-            }
-          }
-        ]
-      );
+      Alert.alert('Error', e.message || 'La tarjeta no tiene una reservación activa para este viaje.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSendAlert = async () => {
+    if (!reportDesc.trim()) {
+      Alert.alert('Error', 'Describe el incidente antes de enviarlo.');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await api.post(`/transporte/alertas`, {
+        viaje_id: Number(visita.id),
+        tipo: reportType,
+        descripcion: reportDesc.trim()
+      });
+
+      Alert.alert('Alerta Reportada', 'El incidente fue enviado a la central de monitoreo.');
+      setReportDesc('');
+      navigation.goBack();
+    } catch (e: any) {
+      Alert.alert('Error', 'No se pudo enviar el reporte: ' + e.message);
     } finally {
       setLoading(false);
     }
@@ -180,107 +71,97 @@ export default function RegistroVisitaScreen({ route, navigation }: any) {
   return (
     <ScrollView style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>Control de Abordaje</Text>
+        <Text style={styles.title}>Validador & Alertas</Text>
         <Text style={styles.subtitle}>{visita.nombre}</Text>
-        <Text style={styles.cuenta}>Viaje ID: {visita.numCuenta}</Text>
+        <Text style={styles.cuenta}>Viaje ID: #{visita.id}</Text>
       </View>
 
-      <View style={styles.statsContainer}>
-        <View style={styles.statBox}>
-          <Text style={styles.statLabel}>Vehículo</Text>
-          <Text style={styles.statValue}>Bus Mercedes</Text>
-        </View>
-        <View style={styles.statBox}>
-          <Text style={styles.statLabel}>Capacidad</Text>
-          <Text style={styles.statValue}>42 Pasajeros</Text>
-        </View>
-        <View style={styles.statBox}>
-          <Text style={styles.statLabel}>Ruta</Text>
-          <Text style={styles.statValue}>Planta Norte</Text>
-        </View>
-      </View>
-
+      {/* RFID Validation Section */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Estado de Abordaje</Text>
+        <Text style={styles.sectionTitle}>Escanear Boleto / RFID</Text>
+        <Text style={styles.inputLabel}>Número de Tarjeta de Personal</Text>
+        <View style={styles.scanRow}>
+          <TextInput
+            style={[styles.textInput, { flex: 1 }]}
+            placeholder="Ej: RFID-4029-X"
+            value={cardId}
+            onChangeText={setCardId}
+            autoCapitalize="none"
+          />
+          <TouchableOpacity 
+            style={styles.scanButton} 
+            onPress={handleValidateCard}
+            disabled={loading}
+          >
+            {loading ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <MaterialCommunityIcons name="card-search-outline" size={24} color="#fff" />
+            )}
+          </TouchableOpacity>
+        </View>
+        <Text style={styles.helpText}>Puedes simular el escaneo escribiendo la tarjeta y presionando validar.</Text>
+      </View>
+
+      {/* Incident / Delay Reports */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Notificar Incidencia en Ruta</Text>
+        <Text style={styles.inputLabel}>Tipo de Retraso/Alerta</Text>
         <View style={styles.optionsGrid}>
-          {resultados.map((opt) => (
+          {[
+            { label: 'Tráfico', value: 'retraso', icon: 'bus-clock' },
+            { label: 'Desvío', value: 'desvio', icon: 'directions-fork' },
+            { label: 'Avería', value: 'accidente', icon: 'engine-outline' },
+            { label: 'Obstrucción', value: 'bloqueo', icon: 'alert-octagon-outline' },
+          ].map((opt) => (
             <TouchableOpacity 
               key={opt.value}
               style={[
                 styles.optionCard,
-                resultado === opt.value && styles.optionCardSelected
+                reportType === opt.value && styles.optionCardSelected
               ]}
-              onPress={() => setResultado(opt.value)}
+              onPress={() => setReportType(opt.value)}
             >
               <MaterialCommunityIcons 
                 name={opt.icon as any} 
-                size={28} 
-                color={resultado === opt.value ? '#fff' : Colors.primary} 
+                size={24} 
+                color={reportType === opt.value ? '#fff' : Colors.primary} 
               />
               <Text style={[
                 styles.optionLabel,
-                resultado === opt.value && styles.optionLabelSelected
+                reportType === opt.value && styles.optionLabelSelected
               ]}>
                 {opt.label}
               </Text>
             </TouchableOpacity>
           ))}
         </View>
-      </View>
 
-      {resultado === 'promesa_pago' && (
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Detalles de Abordaje Físico</Text>
-          <View style={{ flexDirection: 'row', gap: Spacing.md }}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.inputLabel}>Asiento Número</Text>
-              <TextInput
-                style={styles.textInput}
-                placeholder="14"
-                keyboardType="numeric"
-                value={montoPromesa}
-                onChangeText={setMontoPromesa}
-              />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.inputLabel}>Fecha Viaje (DD/MM/AAAA)</Text>
-              <TextInput
-                style={styles.textInput}
-                placeholder="Ex: 25/04/2026"
-                value={fechaPromesa}
-                onChangeText={setFechaPromesa}
-              />
-            </View>
-          </View>
-        </View>
-      )}
-
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Observaciones / Incidencias</Text>
+        <Text style={[styles.inputLabel, { marginTop: 16 }]}>Descripción de la Situación</Text>
         <TextInput
           style={styles.textArea}
-          placeholder="Escribe aquí novedades del viaje o del pasajero..."
+          placeholder="Ej: Tráfico lento por obras públicas en Av. Vallarta, estimado 15 min de retraso."
           multiline
           numberOfLines={4}
-          value={observaciones}
-          onChangeText={setObservaciones}
+          value={reportDesc}
+          onChangeText={setReportDesc}
         />
-      </View>
 
-      <TouchableOpacity 
-        style={[styles.saveButton, loading && { opacity: 0.7 }]} 
-        onPress={handleSave}
-        disabled={loading}
-      >
-        {loading ? (
-          <ActivityIndicator color="#fff" />
-        ) : (
-          <>
-            <MaterialCommunityIcons name="content-save-outline" size={24} color="#fff" />
-            <Text style={styles.saveButtonText}>Guardar Gestión</Text>
-          </>
-        )}
-      </TouchableOpacity>
+        <TouchableOpacity 
+          style={[styles.saveButton, loading && { opacity: 0.7 }]} 
+          onPress={handleSendAlert}
+          disabled={loading}
+        >
+          {loading ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <>
+              <MaterialCommunityIcons name="alert-circle-outline" size={24} color="#fff" />
+              <Text style={styles.saveButtonText}>Enviar Alerta a Central</Text>
+            </>
+          )}
+        </TouchableOpacity>
+      </View>
     </ScrollView>
   );
 }
@@ -310,41 +191,12 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: Colors.textMuted,
     marginTop: 2,
-  },
-  avalDetail: {
-    fontSize: 14,
-    color: Colors.primary,
-    fontWeight: '600',
-    marginTop: 2,
-    fontStyle: 'italic',
-  },
-  statsContainer: {
-    flexDirection: 'row',
-    padding: Spacing.md,
-    gap: Spacing.sm,
-    backgroundColor: '#f8fafc',
-  },
-  statBox: {
-    flex: 1,
-    backgroundColor: Colors.background,
-    padding: Spacing.md,
-    borderRadius: Spacing.sm,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  statLabel: {
-    fontSize: 11,
-    color: Colors.textMuted,
-    marginBottom: 4,
-  },
-  statValue: {
-    fontSize: 14,
     fontWeight: 'bold',
-    color: Colors.text,
   },
   section: {
     padding: Spacing.lg,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
   },
   sectionTitle: {
     fontSize: 16,
@@ -359,6 +211,10 @@ const styles = StyleSheet.create({
     marginBottom: 4,
     textTransform: 'uppercase',
   },
+  scanRow: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+  },
   textInput: {
     backgroundColor: Colors.background,
     borderWidth: 1,
@@ -368,21 +224,33 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: Colors.text,
   },
+  scanButton: {
+    backgroundColor: Colors.primary,
+    paddingHorizontal: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: Spacing.sm,
+  },
+  helpText: {
+    fontSize: 11,
+    color: Colors.textMuted,
+    marginTop: 6,
+    fontStyle: 'italic',
+  },
   optionsGrid: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
     gap: Spacing.sm,
   },
   optionCard: {
-    width: '31%',
+    flex: 1,
     backgroundColor: Colors.background,
-    padding: Spacing.md,
+    padding: Spacing.sm,
     borderRadius: Spacing.sm,
     borderWidth: 1,
     borderColor: Colors.border,
     alignItems: 'center',
     justifyContent: 'center',
-    aspectRatio: 1,
+    height: 72,
   },
   optionCardSelected: {
     backgroundColor: Colors.primary,
@@ -391,7 +259,7 @@ const styles = StyleSheet.create({
   optionLabel: {
     fontSize: 11,
     textAlign: 'center',
-    marginTop: 8,
+    marginTop: 4,
     color: Colors.text,
   },
   optionLabelSelected: {
@@ -406,22 +274,22 @@ const styles = StyleSheet.create({
     padding: Spacing.md,
     fontSize: 16,
     textAlignVertical: 'top',
-    height: 120,
+    height: 100,
   },
   saveButton: {
     flexDirection: 'row',
-    backgroundColor: Colors.primary,
-    margin: Spacing.lg,
+    backgroundColor: '#ef4444',
     padding: Spacing.md,
     borderRadius: Spacing.md,
     alignItems: 'center',
     justifyContent: 'center',
     gap: Spacing.sm,
     height: 56,
+    marginTop: 16,
   },
   saveButtonText: {
     color: '#fff',
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: 'bold',
   },
 });

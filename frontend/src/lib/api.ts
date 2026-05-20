@@ -58,115 +58,190 @@ export function logout() {
   window.location.href = '/login';
 }
 
-export async function fetchSocios(limit = 50, gestorId?: string) {
-  const headers = getAuthHeader();
-  const url = gestorId 
-    ? `${API_URL}/portfolio/socios?limit=${limit}&gestorId=${encodeURIComponent(gestorId)}`
-    : `${API_URL}/portfolio/socios?limit=${limit}`;
-    
-  const res = await fetch(url, { headers });
-  if (!res.ok) throw new Error('Failed to fetch socios');
+export async function fetchRutas(): Promise<any[]> {
+  const res = await fetch(`${API_URL}/transporte/rutas`, { headers: getAuthHeader() });
+  if (!res.ok) throw new Error('Failed to fetch rutas');
   return res.json();
 }
 
-export async function fetchCarteraVencida(gestorId?: string) {
-  const headers = getAuthHeader();
-  const url = gestorId 
-    ? `${API_URL}/portfolio/vencida?gestorId=${encodeURIComponent(gestorId)}`
-    : `${API_URL}/portfolio/vencida`;
-    
-  const res = await fetch(url, { headers });
-  if (!res.ok) throw new Error('Failed to fetch cartera vencida');
-  return res.json();
-}
-
-export async function fetchPromesasPendientes(gestorId?: string, startDate?: string, endDate?: string) {
-  const headers = getAuthHeader();
-  let url = `${API_URL}/crm/promesas/pendientes?`;
-  
-  const params = new URLSearchParams();
-  if (gestorId) params.append('gestorId', gestorId);
-  if (startDate) params.append('startDate', startDate);
-  if (endDate) params.append('endDate', endDate);
-  
-  const res = await fetch(url + params.toString(), { headers });
-  if (!res.ok) throw new Error('Failed to fetch pending promises');
-  return res.json();
-}
-
-export async function fetchAsignaciones(limit = 100, gestorId?: string): Promise<any[]> {
-  const headers = getAuthHeader();
-  let url = `${API_URL}/portfolio/asignaciones?limit=${limit}`;
-  
-  if (gestorId && gestorId !== 'all') {
-    url += `&gestorId=${encodeURIComponent(gestorId)}`;
-  }
-    
-  const response = await fetch(url, { headers });
-  if (!response.ok) throw new Error("Failed to fetch asignaciones");
-  return response.json();
-}
-
-export async function fetchRecuperacion(gestorId?: string, startDate?: string, endDate?: string): Promise<any[]> {
-  const headers = getAuthHeader();
-  const params = new URLSearchParams();
-  if (gestorId && gestorId !== 'all') params.append('gestorId', gestorId);
-  if (startDate) params.append('startDate', startDate);
-  if (endDate) params.append('endDate', endDate);
-
-  const url = `${API_URL}/portfolio/recuperacion?${params.toString()}`;
-    
-  const response = await fetch(url, { headers });
-  if (!response.ok) throw new Error("Failed to fetch recovery data");
-  return response.json();
-}
-
-export async function registrarInteraccion(data: any) {
-  const res = await fetch(`${API_URL}/crm/interacciones`, {
+export async function createRuta(data: any) {
+  const res = await fetch(`${API_URL}/transporte/rutas`, {
     method: 'POST',
-    headers: { 
-      'Content-Type': 'application/json',
-      ...getAuthHeader()
-    },
+    headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
     body: JSON.stringify(data),
   });
-  if (!res.ok) throw new Error('Failed to register interaction');
+  if (!res.ok) throw new Error('Failed to create ruta');
   return res.json();
 }
 
-export async function fetchInteracciones(gestorId?: string, startDate?: string, endDate?: string): Promise<any[]> {
-  const headers = getAuthHeader();
-  let url = `${API_URL}/crm/interacciones?`;
-  
-  const params = new URLSearchParams();
-  if (gestorId) params.append('gestorId', gestorId);
-  if (startDate) params.append('startDate', startDate);
-  if (endDate) params.append('endDate', endDate);
-    
-  const response = await fetch(url + params.toString(), { headers });
-  if (!response.ok) throw new Error("Failed to fetch interactions");
-  return response.json();
-}
-
-export async function fetchInteraccionesSocio(socioId: number): Promise<any[]> {
-  const headers = getAuthHeader();
-  const response = await fetch(`${API_URL}/crm/socios/${socioId}/historial`, { headers });
-  if (!response.ok) throw new Error("Failed to fetch socio history");
-  return response.json();
-}
-
-export async function actualizarAsignacion(noCuenta: string, data: any) {
-  const res = await fetch(`${API_URL}/portfolio/asignaciones/${encodeURIComponent(noCuenta)}`, {
+export async function updateRuta(id: number, data: any) {
+  const res = await fetch(`${API_URL}/transporte/rutas/${id}`, {
     method: 'PATCH',
-    headers: {
-      'Content-Type': 'application/json',
-      ...getAuthHeader()
-    },
+    headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
     body: JSON.stringify(data),
   });
-  if (!res.ok) throw new Error('Failed to update assignment');
+  if (!res.ok) throw new Error('Failed to update ruta');
   return res.json();
 }
+
+export async function deleteRuta(id: number) {
+  const res = await fetch(`${API_URL}/transporte/rutas/${id}`, {
+    method: 'DELETE',
+    headers: getAuthHeader(),
+  });
+  if (!res.ok) throw new Error('Failed to delete ruta');
+  return res.json();
+}
+
+export async function fetchVehiculos(): Promise<any[]> {
+  const res = await fetch(`${API_URL}/transporte/vehiculos`, { headers: getAuthHeader() });
+  if (!res.ok) throw new Error('Failed to fetch vehiculos');
+  return res.json();
+}
+
+export async function createVehiculo(data: any) {
+  const res = await fetch(`${API_URL}/transporte/vehiculos`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error('Failed to create vehiculo');
+  return res.json();
+}
+
+export async function updateVehiculo(id: number, data: any) {
+  const res = await fetch(`${API_URL}/transporte/vehiculos/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error('Failed to update vehiculo');
+  return res.json();
+}
+
+export async function deleteVehiculo(id: number) {
+  const res = await fetch(`${API_URL}/transporte/vehiculos/${id}`, {
+    method: 'DELETE',
+    headers: getAuthHeader(),
+  });
+  if (!res.ok) throw new Error('Failed to delete vehiculo');
+  return res.json();
+}
+
+export async function fetchConductores(): Promise<any[]> {
+  const res = await fetch(`${API_URL}/transporte/conductores`, { headers: getAuthHeader() });
+  if (!res.ok) throw new Error('Failed to fetch conductores');
+  return res.json();
+}
+
+export async function fetchPasajeros(): Promise<any[]> {
+  const res = await fetch(`${API_URL}/transporte/pasajeros`, { headers: getAuthHeader() });
+  if (!res.ok) throw new Error('Failed to fetch pasajeros');
+  return res.json();
+}
+
+export async function fetchViajes(): Promise<any[]> {
+  const res = await fetch(`${API_URL}/transporte/viajes`, { headers: getAuthHeader() });
+  if (!res.ok) throw new Error('Failed to fetch viajes');
+  return res.json();
+}
+
+export async function createViaje(data: any) {
+  const res = await fetch(`${API_URL}/transporte/viajes`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error('Failed to create viaje');
+  return res.json();
+}
+
+export async function updateViajeEstado(id: number, estado: string) {
+  const res = await fetch(`${API_URL}/transporte/viajes/${id}/estado`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+    body: JSON.stringify({ estado }),
+  });
+  if (!res.ok) throw new Error('Failed to update viaje estado');
+  return res.json();
+}
+
+export async function deleteViaje(id: number) {
+  const res = await fetch(`${API_URL}/transporte/viajes/${id}`, {
+    method: 'DELETE',
+    headers: getAuthHeader(),
+  });
+  if (!res.ok) throw new Error('Failed to delete viaje');
+  return res.json();
+}
+
+export async function fetchReservas(viajeId: number): Promise<any[]> {
+  const res = await fetch(`${API_URL}/transporte/viajes/${viajeId}/reservas`, { headers: getAuthHeader() });
+  if (!res.ok) throw new Error('Failed to fetch reservas');
+  return res.json();
+}
+
+export async function createReserva(data: any) {
+  const res = await fetch(`${API_URL}/transporte/reservas`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error('Failed to create reserva');
+  return res.json();
+}
+
+export async function updateReservaEstado(id: number, estado: string) {
+  const res = await fetch(`${API_URL}/transporte/reservas/${id}/estado`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+    body: JSON.stringify({ estado }),
+  });
+  if (!res.ok) throw new Error('Failed to update reserva estado');
+  return res.json();
+}
+
+export async function fetchLatestLocations(): Promise<any[]> {
+  const res = await fetch(`${API_URL}/transporte/locations/latest`, { headers: getAuthHeader() });
+  if (!res.ok) throw new Error('Failed to fetch latest locations');
+  return res.json();
+}
+
+export async function saveLocation(data: any) {
+  const res = await fetch(`${API_URL}/transporte/locations`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error('Failed to save location');
+  return res.json();
+}
+
+export async function fetchAlertas(): Promise<any[]> {
+  const res = await fetch(`${API_URL}/transporte/alertas`, { headers: getAuthHeader() });
+  if (!res.ok) throw new Error('Failed to fetch alertas');
+  return res.json();
+}
+
+export async function createAlerta(data: any) {
+  const res = await fetch(`${API_URL}/transporte/alertas`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error('Failed to create alerta');
+  return res.json();
+}
+
+export async function resolverAlerta(id: number) {
+  const res = await fetch(`${API_URL}/transporte/alertas/${id}/resolver`, {
+    method: 'PATCH',
+    headers: getAuthHeader(),
+  });
+  if (!res.ok) throw new Error('Failed to resolve alerta');
+  return res.json();
+}
+
 export async function fetchRentas(): Promise<any[]> {
   const response = await fetch(`${API_URL}/renta`, {
     headers: getAuthHeader(),
@@ -177,7 +252,7 @@ export async function fetchRentas(): Promise<any[]> {
 
 export async function upsertRenta(data: any) {
   const res = await fetch(`${API_URL}/renta`, {
-    method: 'POST', // Usamos POST para upsert
+    method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       ...getAuthHeader()
@@ -185,25 +260,5 @@ export async function upsertRenta(data: any) {
     body: JSON.stringify(data),
   });
   if (!res.ok) throw new Error('Failed to update rent info');
-  return res.json();
-}
-
-export async function importAvales(file: File) {
-  const formData = new FormData();
-  formData.append('file', file);
-  
-  const res = await fetch(`${API_URL}/portfolio/import-avales`, {
-    method: 'POST',
-    headers: {
-      ...getAuthHeader()
-    },
-    body: formData,
-  });
-  
-  if (!res.ok) {
-    const error = await res.json();
-    throw new Error(error.message || 'Error al importar avales');
-  }
-  
   return res.json();
 }

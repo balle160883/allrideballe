@@ -22,17 +22,17 @@ export default function VisitasNavigator() {
       <Stack.Screen 
         name="VisitasList" 
         component={VisitasScreen} 
-        options={{ title: 'Mis Visitas' }} 
+        options={{ title: 'Mis Viajes' }} 
       />
       <Stack.Screen 
         name="DetalleVisita" 
         component={DetalleVisitaScreen} 
-        options={{ title: 'Detalle de Visita' }} 
+        options={{ title: 'Detalle del Viaje' }} 
       />
       <Stack.Screen 
         name="RegistroVisita" 
         component={RegistroVisitaScreen} 
-        options={{ title: 'Registrar Gestión' }} 
+        options={{ title: 'Escanear / Alertas' }} 
       />
     </Stack.Navigator>
   );

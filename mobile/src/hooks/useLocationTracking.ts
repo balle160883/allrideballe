@@ -36,8 +36,8 @@ export function useLocationTracking() {
       distanceInterval: 10, // 10 meters
       deferredUpdatesInterval: 20000,
       foregroundService: {
-        notificationTitle: 'GC-CPO Seguimiento',
-        notificationBody: 'Rastreo de ubicación activo para el gestor.',
+        notificationTitle: 'Pro Mobile Seguimiento',
+        notificationBody: 'Rastreo de ubicación en tiempo real activo para la ruta.',
       },
     });
   };
@@ -61,13 +61,13 @@ TaskManager.defineTask(LOCATION_TRACKING_TASK, async ({ data, error }: any) => {
     const location = locations[0];
     if (location) {
       try {
-        const userDataSerialized = await SecureStore.getItemAsync('user_info');
-        if (userDataSerialized) {
-          const userData = JSON.parse(userDataSerialized);
-          await api.post('/portfolio/locations', {
-            gestor_id: userData.id,
+        const activeViajeId = await SecureStore.getItemAsync('active_viaje_id');
+        if (activeViajeId) {
+          await api.post('/transporte/viajes/location', {
+            viaje_id: Number(activeViajeId),
             latitud: location.coords.latitude,
             longitud: location.coords.longitude,
+            velocidad: location.coords.speed || 0,
             timestamp: new Date().toISOString(),
           });
         }

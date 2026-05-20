@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   StyleSheet, 
   View, 
@@ -6,168 +6,125 @@ import {
   ScrollView, 
   TouchableOpacity, 
   Alert,
-  ActivityIndicator 
+  ActivityIndicator,
+  Linking
 } from 'react-native';
 import { Colors, Spacing } from '../constants/theme';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { BluetoothPrinter } from '../utils/BluetoothPrinter';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../api/backend';
-import { Linking, Platform } from 'react-native';
-import { OfflineService } from '../utils/OfflineService';
+import * as SecureStore from 'expo-secure-store';
 
 export default function DetalleVisitaScreen({ route, navigation }: any) {
   const { visita } = route.params;
   const { user } = useAuth();
   const [loading, setLoading] = useState(false);
+  const [reservas, setReservas] = useState<any[]>([]);
+  const [tripState, setTripState] = useState(visita.situacion);
 
-  const esVencido = visita.situacion?.toUpperCase().includes('VENCID') || visita.diasMora > 0;
-  const statusColor = esVencido ? '#ef4444' : Colors.success;
+  useEffect(() => {
+    fetchReservations();
+  }, []);
 
-  const handlePrint = async () => {
-    setLoading(true);
+  const fetchReservations = async () => {
     try {
-      await BluetoothPrinter.generateTicket({
-        tipo: visita.tipo.includes('Aval') ? 'aval' : 'aviso',
-          nombreSocio: visita.tipo.includes('Aval') ? (visita.nombreSocio || 'Socio Titular') : visita.nombre,
-          socioId: visita.socioId,
-          cuenta: visita.numCuenta,
-          saldoAtrasado: visita.saldoAlDia,
-          gestorNombre: user?.gestor || 'Gestor CPO',
-          gestorTelefono: '3339421050 ext. 1110, 1111, 1194',
-          nombreAval: visita.tipo.includes('Aval') ? visita.nombre : undefined,
-          titularNombre: visita.tipo.includes('Aval') ? (visita.nombreSocio || 'Socio Titular') : undefined,
-          titularSocioId: visita.tipo.includes('Aval') ? visita.socioId : undefined,
-      });
+      setLoading(true);
+      const data = await api.get(`/transporte/viajes/${visita.id}/reservas`);
+      setReservas(data || []);
     } catch (e) {
-      Alert.alert('Error', 'No se pudo generar el ticket.');
+      console.warn("Error fetching reservations for trip details:", e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleStartTrip = async () => {
+    try {
+      setLoading(true);
+      await api.patch(`/transporte/viajes/${visita.id}/estado`, { estado: 'en_progreso' });
+      await SecureStore.setItemAsync('active_viaje_id', visita.id.toString());
+      setTripState('en_progreso');
+      Alert.alert('Viaje Iniciado', 'El viaje ha cambiado a En Progreso. El rastreo GPS en segundo plano está activo.');
+    } catch (e: any) {
+      Alert.alert('Error', 'No se pudo iniciar el viaje: ' + e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleFinishTrip = async () => {
+    try {
+      setLoading(true);
+      await api.patch(`/transporte/viajes/${visita.id}/estado`, { estado: 'finalizado' });
+      await SecureStore.deleteItemAsync('active_viaje_id');
+      setTripState('finalizado');
+      Alert.alert('Viaje Finalizado', 'El recorrido ha concluido con éxito.');
+      navigation.goBack();
+    } catch (e: any) {
+      Alert.alert('Error', 'No se pudo finalizar el viaje: ' + e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleTogglePassenger = async (reservaId: number, currentStatus: string) => {
+    const nextStatus = currentStatus === 'confirmado' ? 'reservado' : 'confirmado';
+    try {
+      setLoading(true);
+      await api.patch(`/transporte/reservas/${reservaId}/estado`, { estado: nextStatus });
+      fetchReservations();
+    } catch (e: any) {
+      Alert.alert('Error', 'No se pudo actualizar el abordaje: ' + e.message);
     } finally {
       setLoading(false);
     }
   };
 
   const handleRegistrar = () => {
-    navigation.navigate('RegistroVisita', { visita });
+    navigation.navigate('RegistroVisita', { visita, onScanSuccess: fetchReservations });
   };
-
-  const handleCerrarVisita = async () => {
-    Alert.alert(
-      'Cerrar Visita',
-      '¿Estás seguro de que deseas marcar esta visita como completada?',
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        { 
-          text: 'Confirmar', 
-          onPress: async () => {
-            setLoading(true);
-            try {
-              const isOnline = await OfflineService.isOnline();
-              
-              if (!isOnline) {
-                 await OfflineService.saveGestionOffline({
-                   updateAsignacion: {
-                     numCuenta: visita.numCuenta,
-                     situacion: 'VISITADO'
-                   }
-                 });
-                 Alert.alert('Modo Offline', 'Visita cerrada (guardada para sincronizar luego).');
-                 navigation.goBack();
-                 return;
-              }
-
-              await api.patch(`/portfolio/asignaciones/${visita.numCuenta}`, {
-                'SITUACIÓN DEL CRÉDITO': 'VISITADO'
-              });
-
-              Alert.alert('Éxito', 'Visita cerrada correctamente.');
-              navigation.goBack();
-            } catch (e: any) {
-              Alert.alert('Error', 'No se pudo cerrar la visita: ' + e.message);
-            } finally {
-              setLoading(false);
-            }
-          }
-        }
-      ]
-    );
-  };
-
-  const handleReabrirVisita = async () => {
-    Alert.alert(
-      'Volver a realizar visita',
-      '¿Deseas marcar esta visita como pendiente nuevamente?',
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        { 
-          text: 'Confirmar', 
-          onPress: async () => {
-            setLoading(true);
-            try {
-              const isOnline = await OfflineService.isOnline();
-              
-              if (!isOnline) {
-                 Alert.alert('Error', 'Esta acción requiere conexión a internet.');
-                 return;
-              }
-
-              // Actualizamos el estado a 'VIGENTE' (o el estado original)
-              await api.patch(`/portfolio/asignaciones/${visita.numCuenta}`, {
-                'SITUACIÓN DEL CRÉDITO': 'VIGENTE'
-              });
-
-              Alert.alert('Éxito', 'La visita ha sido marcada como pendiente nuevamente.');
-              navigation.goBack();
-            } catch (e: any) {
-              Alert.alert('Error', 'No se pudo actualizar la visita: ' + e.message);
-            } finally {
-              setLoading(false);
-            }
-          }
-        }
-      ]
-    );
-  };
-
 
   const handleNavigate = async () => {
-    const { latitud, longitud, domicilio, colonia, municipio } = visita;
+    const lat = visita.latitud || 20.6736;
+    const lng = visita.longitud || -103.3496;
     
-    // Priorizamos Waze como solicitó el usuario
-    const wazeUrl = latitud && longitud 
-      ? `https://waze.com/ul?ll=${latitud},${longitud}&navigate=yes`
-      : `https://waze.com/ul?q=${encodeURIComponent(`${domicilio}, ${colonia}, ${municipio || ''}`)}&navigate=yes`;
-
-    // Respaldo para Google Maps / Apple Maps
-    const googleMapsUrl = latitud && longitud
-      ? `https://www.google.com/maps/search/?api=1&query=${latitud},${longitud}`
-      : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${domicilio}, ${colonia}, ${municipio || ''}`)}`;
+    // Waze
+    const wazeUrl = `https://waze.com/ul?ll=${lat},${lng}&navigate=yes`;
+    // Google Maps
+    const googleMapsUrl = `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
 
     try {
       const canOpenWaze = await Linking.canOpenURL('waze://');
       if (canOpenWaze) {
         await Linking.openURL(wazeUrl);
       } else {
-        // Si no tiene Waze, abrimos el mapa por defecto del sistema
         await Linking.openURL(googleMapsUrl);
       }
     } catch (error) {
-      Alert.alert('Error', 'No se pudo abrir la aplicación de navegación.');
+      Alert.alert('Error', 'No se pudo iniciar la aplicación de mapas.');
     }
   };
+
+  const countConfirmed = reservas.filter(r => r.estado === 'confirmado').length;
 
   return (
     <ScrollView style={styles.container}>
       <View style={styles.card}>
         <View style={styles.header}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              <Text style={styles.tipo}>Ruta Corporativa</Text>
-              <View style={[styles.statusBadge, { backgroundColor: statusColor }]}>
-                <Text style={styles.statusText}>{visita.isRealizada ? 'COMPLETADO' : 'EN RUTA'}</Text>
+              <Text style={styles.tipo}>Ruta de Personal</Text>
+              <View style={[
+                styles.statusBadge, 
+                { backgroundColor: tripState === 'en_progreso' ? '#3b82f6' : tripState === 'finalizado' ? '#10b981' : '#f59e0b' }
+              ]}>
+                <Text style={styles.statusText}>
+                  {tripState === 'en_progreso' ? 'En Progreso' : tripState === 'finalizado' ? 'Finalizado' : 'Programado'}
+                </Text>
               </View>
             </View>
             <View style={{ alignItems: 'flex-end' }}>
-              <Text style={styles.cuenta}>Viaje ID: {visita.numCuenta}</Text>
-              <Text style={styles.socioId}>Vehículo: Bus 42</Text>
+              <Text style={styles.cuenta}>Viaje ID: #{visita.id}</Text>
+              <Text style={styles.socioId}>Unidad: {visita.socioId}</Text>
             </View>
         </View>
         <Text style={styles.nombre}>{visita.nombre}</Text>
@@ -175,117 +132,97 @@ export default function DetalleVisitaScreen({ route, navigation }: any) {
         <View style={styles.infoRow}>
            <MaterialCommunityIcons name="map-marker" size={20} color={Colors.primary} />
            <Text style={styles.infoText}>
-             {visita.domicilio || 'Sin recorrido asignado'}
+             {visita.domicilio} → {visita.colonia}
            </Text>
         </View>
 
         <View style={styles.infoRow}>
-           <MaterialCommunityIcons name="bus-clock" size={20} color={Colors.primary} />
-           <Text style={styles.infoText}>Frecuencia: Diaria · 07:30 hrs</Text>
+           <MaterialCommunityIcons name="account-tie" size={20} color={Colors.primary} />
+           <Text style={styles.infoText}>Chofer: {visita.nombreSocio}</Text>
         </View>
       </View>
 
       <View style={styles.statsContainer}>
         <View style={styles.statBox}>
           <Text style={styles.statLabel}>Capacidad</Text>
-          <Text style={styles.statValue}>42 Asientos</Text>
+          <Text style={styles.statValue}>{visita.saldoTotal} Asientos</Text>
         </View>
         <View style={styles.statBox}>
-          <Text style={styles.statLabel}>Reservas</Text>
-          <Text style={styles.statValue}>1 Ocupado</Text>
+          <Text style={styles.statLabel}>Abordados</Text>
+          <Text style={styles.statValue}>{countConfirmed} / {reservas.length}</Text>
         </View>
         <View style={styles.statBox}>
-          <Text style={styles.statLabel}>Estado</Text>
-          <Text style={styles.statValue}>Vigente</Text>
+          <Text style={styles.statLabel}>Vehículo</Text>
+          <Text style={styles.statValue} numberOfLines={1}>{visita.socioId}</Text>
         </View>
       </View>
 
+      {/* Manifest list */}
       <View style={styles.financialSection}>
-        <Text style={styles.sectionTitle}>Detalles del Servicio</Text>
-        <Text style={styles.creditType}>Operador: Transportes del Valle</Text>
+        <Text style={styles.sectionTitle}>Manifiesto de Pasajeros</Text>
+        <Text style={styles.creditType}>Confirmar boarding de personal</Text>
         
-        <View style={styles.finGrid}>
-          <View style={styles.finBox}>
-            <Text style={styles.finLabel}>Parada Inicial</Text>
-            <Text style={styles.finValue}>Plaza Central</Text>
+        {loading && reservas.length === 0 ? (
+          <ActivityIndicator size="small" color={Colors.primary} style={{ marginVertical: 12 }} />
+        ) : reservas.length === 0 ? (
+          <Text style={styles.emptyText}>No hay reservaciones de asientos para este viaje.</Text>
+        ) : (
+          <View style={styles.passengerList}>
+            {reservas.map((res: any) => {
+              const isConfirmed = res.estado === 'confirmado';
+              return (
+                <TouchableOpacity 
+                  key={res.id} 
+                  style={[styles.passengerRow, isConfirmed && styles.passengerConfirmed]}
+                  onPress={() => handleTogglePassenger(res.id, res.estado)}
+                >
+                  <View style={styles.seatBadge}>
+                    <Text style={styles.seatText}>#{res.asiento_numero}</Text>
+                  </View>
+                  <View style={{ flex: 1, marginLeft: 8 }}>
+                    <Text style={[styles.passengerName, isConfirmed && { textDecorationLine: 'line-through' }]}>
+                      {res.pasajero_nombre}
+                    </Text>
+                    <Text style={styles.passengerCard}>RFID: {res.identificador_tarjeta || 'No asignada'}</Text>
+                  </View>
+                  <MaterialCommunityIcons 
+                    name={isConfirmed ? "checkbox-marked-circle" : "checkbox-blank-circle-outline"} 
+                    size={24} 
+                    color={isConfirmed ? Colors.success : Colors.border} 
+                  />
+                </TouchableOpacity>
+              );
+            })}
           </View>
-          <View style={styles.finBox}>
-            <Text style={styles.finLabel}>Parada Final</Text>
-            <Text style={[styles.finValue, { color: Colors.primary }]}>Planta Norte</Text>
-          </View>
-          <View style={styles.finBox}>
-            <Text style={styles.finLabel}>Tipo Flota</Text>
-            <Text style={styles.finValue}>Buses</Text>
-          </View>
-          <View style={styles.finBox}>
-            <Text style={styles.finLabel}>Operación</Text>
-            <Text style={[styles.finValue, { color: Colors.success }]}>Normal</Text>
-          </View>
-          <View style={styles.finBox}>
-            <Text style={styles.finLabel}>Soporte Offline</Text>
-            <Text style={styles.finValue}>Activo</Text>
-          </View>
-        </View>
-
-        <View style={styles.datesRow}>
-          <View style={styles.dateBox}>
-            <Text style={styles.finLabel}>Último Abordaje</Text>
-            <Text style={styles.dateValue}>María Gómez</Text>
-          </View>
-          <View style={styles.dateBox}>
-            <Text style={styles.finLabel}>Siguiente Servicio</Text>
-            <Text style={styles.dateValue}>11:30 hrs</Text>
-          </View>
-        </View>
-      </View>
-
-      <View style={styles.actions}>
-        <TouchableOpacity style={[styles.actionButton, styles.primaryButton]} onPress={handleRegistrar}>
-          <MaterialCommunityIcons name="qrcode-scan" color="#fff" size={24} />
-          <Text style={styles.actionButtonText}>Validar Abordaje</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity 
-          style={[styles.actionButton, styles.accentButton, loading && { opacity: 0.7 }]} 
-          onPress={() => Alert.alert('Reservas', 'Asientos asignados:\nAsiento 14: María Gómez')}
-          disabled={loading}
-        >
-          <MaterialCommunityIcons name="seat-passenger" color="#fff" size={24} />
-          <Text style={styles.actionButtonText}>Ver Asientos</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={[styles.actionButton, styles.secondaryButton]} onPress={handleNavigate}>
-          <MaterialCommunityIcons name="navigation-variant-outline" color="#fff" size={24} />
-          <Text style={styles.actionButtonText}>Iniciar Navegación</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity 
-          style={[styles.actionButton, styles.successButton]} 
-          onPress={handleCerrarVisita}
-          disabled={loading}
-        >
-          <MaterialCommunityIcons name="check-circle-outline" color="#fff" size={24} />
-          <Text style={styles.actionButtonText}>Completar Ruta</Text>
-        </TouchableOpacity>
-
-        {visita.isRealizada && (
-          <TouchableOpacity 
-            style={[styles.actionButton, { backgroundColor: '#f59e0b' }]} 
-            onPress={handleReabrirVisita}
-            disabled={loading}
-          >
-            <MaterialCommunityIcons name="refresh" color="#fff" size={24} />
-            <Text style={styles.actionButtonText}>Reiniciar Recorrido</Text>
-          </TouchableOpacity>
         )}
       </View>
 
-      <View style={styles.history}>
-         <Text style={styles.historyTitle}>Log del Viaje</Text>
-         <View style={styles.historyItem}>
-            <MaterialCommunityIcons name="clock-outline" size={16} color={Colors.textMuted} />
-            <Text style={styles.historyText}>Viaje programado iniciado sin incidencias.</Text>
-         </View>
+      <View style={styles.actions}>
+        {tripState === 'programado' && (
+          <TouchableOpacity style={[styles.actionButton, styles.primaryButton]} onPress={handleStartTrip}>
+            <MaterialCommunityIcons name="play" color="#fff" size={24} />
+            <Text style={styles.actionButtonText}>Iniciar Recorrido</Text>
+          </TouchableOpacity>
+        )}
+
+        {tripState === 'en_progreso' && (
+          <>
+            <TouchableOpacity style={[styles.actionButton, styles.successButton]} onPress={handleFinishTrip}>
+              <MaterialCommunityIcons name="check-circle-outline" color="#fff" size={24} />
+              <Text style={styles.actionButtonText}>Terminar Recorrido</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={[styles.actionButton, styles.primaryButton]} onPress={handleRegistrar}>
+              <MaterialCommunityIcons name="qrcode-scan" color="#fff" size={24} />
+              <Text style={styles.actionButtonText}>Escanear Abordaje</Text>
+            </TouchableOpacity>
+          </>
+        )}
+
+        <TouchableOpacity style={[styles.actionButton, styles.secondaryButton]} onPress={handleNavigate}>
+          <MaterialCommunityIcons name="navigation-variant-outline" color="#fff" size={24} />
+          <Text style={styles.actionButtonText}>Navegación GPS</Text>
+        </TouchableOpacity>
       </View>
     </ScrollView>
   );
@@ -327,6 +264,7 @@ const styles = StyleSheet.create({
   cuenta: {
     fontSize: 14,
     color: Colors.textMuted,
+    fontWeight: 'bold',
   },
   socioId: {
     fontSize: 12,
@@ -338,23 +276,6 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: Colors.text,
     marginBottom: Spacing.sm,
-  },
-  avalRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: Spacing.md,
-    backgroundColor: '#eff6ff',
-    padding: Spacing.md,
-    borderRadius: Spacing.sm,
-  },
-  avalText: {
-    marginLeft: Spacing.sm,
-    fontSize: 14,
-    color: Colors.text,
-  },
-  socioName: {
-    fontWeight: 'bold',
-    color: Colors.primary,
   },
   infoRow: {
     flexDirection: 'row',
@@ -387,7 +308,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   statValue: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: 'bold',
     color: Colors.text,
   },
@@ -411,46 +332,50 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.md,
     textTransform: 'uppercase',
   },
-  finGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: Spacing.sm,
-    justifyContent: 'space-between',
+  emptyText: {
+    fontSize: 14,
+    color: Colors.textMuted,
+    fontStyle: 'italic',
+    paddingVertical: 10,
   },
-  finBox: {
-    width: '48%',
-    backgroundColor: '#f8fafc',
-    padding: Spacing.sm,
-    borderRadius: Spacing.sm,
+  passengerList: {
+    marginTop: 8,
+    gap: 8,
+  },
+  passengerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 10,
     borderWidth: 1,
     borderColor: Colors.border,
+    borderRadius: 8,
+    backgroundColor: Colors.background,
   },
-  finLabel: {
-    fontSize: 11,
-    color: Colors.textMuted,
-    marginBottom: 2,
+  passengerConfirmed: {
+    borderColor: '#bbf7d0',
+    backgroundColor: '#f0fdf4',
   },
-  finValue: {
-    fontSize: 15,
+  seatBadge: {
+    backgroundColor: '#f1f5f9',
+    width: 32,
+    height: 32,
+    borderRadius: 6,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  seatText: {
+    fontSize: 12,
+    fontWeight: 'black',
+    color: Colors.text,
+  },
+  passengerName: {
+    fontSize: 14,
     fontWeight: 'bold',
     color: Colors.text,
   },
-  datesRow: {
-    flexDirection: 'row',
-    marginTop: Spacing.md,
-    gap: Spacing.sm,
-  },
-  dateBox: {
-    flex: 1,
-    backgroundColor: '#e0e7ff',
-    padding: Spacing.sm,
-    borderRadius: Spacing.sm,
-    alignItems: 'center',
-  },
-  dateValue: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: Colors.primary,
+  passengerCard: {
+    fontSize: 11,
+    color: Colors.textMuted,
   },
   actions: {
     padding: Spacing.md,
@@ -467,9 +392,6 @@ const styles = StyleSheet.create({
   primaryButton: {
     backgroundColor: Colors.primary,
   },
-  accentButton: {
-    backgroundColor: Colors.accent,
-  },
   secondaryButton: {
     backgroundColor: Colors.secondary,
   },
@@ -482,21 +404,4 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     paddingLeft: Spacing.sm,
   },
-  history: {
-    padding: Spacing.lg,
-  },
-  historyTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: Spacing.md,
-  },
-  historyItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.sm,
-  },
-  historyText: {
-    color: Colors.textMuted,
-    fontSize: 14,
-  }
 });

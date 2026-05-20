@@ -1,0 +1,290 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { useRouter } from 'next/navigation';
+import { 
+  Bus, 
+  Plus, 
+  Trash2, 
+  Edit3, 
+  X, 
+  Save, 
+  Loader2, 
+  ShieldCheck,
+  Tag
+} from "lucide-react";
+import { 
+  fetchVehiculos, 
+  createVehiculo, 
+  updateVehiculo, 
+  deleteVehiculo 
+} from "@/lib/api";
+
+export default function VehiculosPage() {
+  const [vehiculos, setVehiculos] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [currentId, setCurrentId] = useState<number | null>(null);
+
+  // Form states
+  const [patente, setPatente] = useState("");
+  const [modelo, setModelo] = useState("");
+  const [capacidad, setCapacidad] = useState(30);
+  const [proveedorNombre, setProveedorNombre] = useState("");
+
+  const [errorMsg, setErrorMsg] = useState("");
+  const router = useRouter();
+
+  useEffect(() => {
+    const userInfo = localStorage.getItem('user_info');
+    if (userInfo) {
+      try {
+        const user = JSON.parse(userInfo);
+        const isAdmin = 
+          user.rol === 'admin' || 
+          user.rol === 'admin_cliente' || 
+          user.rol === 'admin_proveedor' ||
+          user.rol === 'superadmin';
+        if (!isAdmin) {
+          router.push('/');
+        }
+      } catch (e) {
+        router.push('/login');
+      }
+    } else {
+      router.push('/login');
+    }
+    loadVehiculos();
+  }, []);
+
+  const loadVehiculos = async () => {
+    setLoading(true);
+    try {
+      const data = await fetchVehiculos();
+      setVehiculos(data);
+    } catch (error) {
+      console.error("Error loading vehicles:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleOpenCreate = () => {
+    setIsEditing(false);
+    setPatente("");
+    setModelo("");
+    setCapacidad(30);
+    setProveedorNombre("");
+    setErrorMsg("");
+    setIsModalOpen(true);
+  };
+
+  const handleOpenEdit = (vehiculo: any) => {
+    setIsEditing(true);
+    setCurrentId(vehiculo.id);
+    setPatente(vehiculo.patente);
+    setModelo(vehiculo.modelo);
+    setCapacidad(vehiculo.capacidad);
+    setProveedorNombre(vehiculo.proveedor_nombre || "");
+    setErrorMsg("");
+    setIsModalOpen(true);
+  };
+
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!patente.trim() || !modelo.trim() || !capacidad) {
+      setErrorMsg("Patente, Modelo y Capacidad son obligatorios.");
+      return;
+    }
+
+    const payload = {
+      patente: patente.trim().toUpperCase(),
+      modelo: modelo.trim(),
+      capacidad: Number(capacidad),
+      proveedor_nombre: proveedorNombre.trim()
+    };
+
+    try {
+      if (isEditing && currentId !== null) {
+        await updateVehiculo(currentId, payload);
+      } else {
+        await createVehiculo(payload);
+      }
+      setIsModalOpen(false);
+      loadVehiculos();
+    } catch (err: any) {
+      setErrorMsg(err.message || "Error al guardar el vehículo.");
+    }
+  };
+
+  const handleDelete = async (id: number) => {
+    if (!confirm("¿Deseas eliminar este vehículo de la flota?")) return;
+    try {
+      await deleteVehiculo(id);
+      loadVehiculos();
+    } catch (err) {
+      console.error("Error deleting vehicle:", err);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 px-2">
+        <div>
+          <h1 className="text-2xl lg:text-3xl font-extrabold text-slate-900 tracking-tight flex items-center gap-2">
+            <Bus className="text-blue-600" size={32} />
+            Administración de Flota
+          </h1>
+          <p className="text-slate-500 font-medium text-sm lg:text-base">Controla los vehículos autorizados, la capacidad de asientos y proveedores de servicio.</p>
+        </div>
+        <button
+          onClick={handleOpenCreate}
+          className="bg-blue-600 text-white font-bold rounded-xl p-3 px-5 text-sm hover:bg-blue-700 flex items-center gap-2 shadow-lg shadow-blue-600/10 hover:shadow-blue-600/20 transition-all self-start sm:self-center"
+        >
+          <Plus size={18} /> Agregar Vehículo
+        </button>
+      </div>
+
+      {loading ? (
+        <div className="flex items-center justify-center p-12">
+          <Loader2 className="animate-spin text-blue-600" size={36} />
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {vehiculos.length === 0 ? (
+            <div className="col-span-full bg-white rounded-2xl border border-slate-200 p-12 text-center">
+              <Bus className="text-slate-300 mx-auto mb-4" size={48} />
+              <p className="text-slate-500 font-bold text-lg">No hay vehículos registrados</p>
+              <p className="text-slate-400 text-sm mt-1">Haz clic en "Agregar Vehículo" para dar de alta tu primera unidad.</p>
+            </div>
+          ) : (
+            vehiculos.map((v) => (
+              <div key={v.id} className="bg-white rounded-2xl border border-slate-200 p-6 flex flex-col justify-between shadow-sm hover:shadow-md transition-all relative">
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-black uppercase text-blue-600 bg-blue-50 border border-blue-100 px-3 py-1 rounded-md tracking-widest">
+                      {v.patente}
+                    </span>
+                    <span className="text-xs text-slate-400 font-bold">Capacidad: {v.capacidad} Asientos</span>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <h3 className="text-lg font-extrabold text-slate-900">{v.modelo}</h3>
+                    <div className="flex items-center gap-1.5 text-xs text-slate-500 font-semibold">
+                      <Tag size={14} className="text-slate-400" />
+                      Proveedor: <span className="text-slate-800">{v.proveedor_nombre || 'Interno'}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex justify-end gap-3 mt-6 border-t border-slate-50 pt-4">
+                  <button 
+                    onClick={() => handleOpenEdit(v)}
+                    className="p-2 text-slate-500 hover:text-blue-600 bg-slate-50 hover:bg-blue-50 border border-slate-200 rounded-xl transition-all"
+                    title="Editar Vehículo"
+                  >
+                    <Edit3 size={16} />
+                  </button>
+                  <button 
+                    onClick={() => handleDelete(v.id)}
+                    className="p-2 text-slate-500 hover:text-red-600 bg-slate-50 hover:bg-red-50 border border-slate-200 rounded-xl transition-all"
+                    title="Eliminar Vehículo"
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      )}
+
+      {/* Modal Agregar/Editar Vehículo */}
+      {isModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full shadow-2xl p-6 relative border border-slate-100 animate-in fade-in zoom-in-95 duration-200">
+            <button 
+              onClick={() => setIsModalOpen(false)}
+              className="absolute top-4 right-4 text-slate-400 hover:text-slate-600"
+            >
+              <X size={20} />
+            </button>
+            <h3 className="text-lg font-extrabold text-slate-950 flex items-center gap-2 mb-4">
+              <Bus className="text-blue-600" size={22} />
+              {isEditing ? "Editar Vehículo de la Flota" : "Agregar Nuevo Vehículo"}
+            </h3>
+            {errorMsg && (
+              <div className="p-3 mb-4 bg-red-50 border border-red-200 text-red-700 rounded-lg text-xs font-bold">
+                {errorMsg}
+              </div>
+            )}
+            
+            <form onSubmit={handleSave} className="space-y-4">
+              <div>
+                <label className="block text-[10px] font-black uppercase text-slate-400 tracking-wider mb-2">Matrícula / Patente</label>
+                <input
+                  type="text"
+                  value={patente}
+                  onChange={(e) => setPatente(e.target.value)}
+                  placeholder="Ej: ABC-1234"
+                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm font-semibold text-slate-700"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-black uppercase text-slate-400 tracking-wider mb-2">Modelo / Descripción</label>
+                <input
+                  type="text"
+                  value={modelo}
+                  onChange={(e) => setModelo(e.target.value)}
+                  placeholder="Ej: Mercedes-Benz Sprinter 2024"
+                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm font-semibold text-slate-700"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[10px] font-black uppercase text-slate-400 tracking-wider mb-2">Capacidad Asientos</label>
+                  <input
+                    type="number"
+                    value={capacidad}
+                    onChange={(e) => setCapacidad(Number(e.target.value))}
+                    min={1}
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm font-semibold text-slate-700"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-black uppercase text-slate-400 tracking-wider mb-2">Proveedor / Línea</label>
+                  <input
+                    type="text"
+                    value={proveedorNombre}
+                    onChange={(e) => setProveedorNombre(e.target.value)}
+                    placeholder="Ej: Transportes GDL"
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm font-semibold text-slate-700"
+                  />
+                </div>
+              </div>
+
+              <div className="flex gap-3 mt-6">
+                <button
+                  type="button"
+                  onClick={() => setIsModalOpen(false)}
+                  className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-sm transition-all"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-sm shadow-lg shadow-blue-900/10 transition-all flex items-center justify-center gap-1"
+                >
+                  <Save size={16} /> Guardar Unidad
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

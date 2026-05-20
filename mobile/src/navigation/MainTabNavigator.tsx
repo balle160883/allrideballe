@@ -50,9 +50,9 @@ export default function MainTabNavigator() {
         component={VisitasNavigator} 
         options={{
           tabBarIcon: ({ color }) => (
-            <MaterialCommunityIcons name="home-variant" color={color} size={28} />
+            <MaterialCommunityIcons name="bus" color={color} size={28} />
           ),
-          title: 'Visitas',
+          title: 'Viajes',
           headerShown: false,
         }}
       />

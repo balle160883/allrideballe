@@ -4,15 +4,13 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { 
   LayoutDashboard, 
-  Users, 
   CreditCard, 
-  MessageSquare, 
-  CalendarCheck, 
-  BarChart3,
   Map,
   LogOut,
-  Archive,
-  Upload
+  Route,
+  Bus,
+  Calendar,
+  Users
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
@@ -31,17 +29,15 @@ export function Sidebar({ isOpen, onClose }: { isOpen?: boolean, onClose?: () =>
         const userEmail = user.email?.trim().toLowerCase();
         
         const superRole = 
-          user.rol?.toLowerCase() === 'superadmin' || 
-          user.gestor?.toUpperCase() === 'SUPERADMIN';
+         user.rol?.toLowerCase() === 'superadmin' || 
+         user.gestor?.toUpperCase() === 'SUPERADMIN';
 
         const isAdminUser = 
           user.rol?.toLowerCase() === 'admin' || 
           user.rol?.toLowerCase() === 'admin_cliente' || 
           user.rol?.toLowerCase() === 'admin_proveedor' || 
           superRole ||
-          userEmail === 'ing.ballesteros16@gmail.com' ||
-          user.gestor?.toUpperCase() === 'ADMINISTRADOR GLOBAL' ||
-          user.gestor?.toUpperCase() === 'SUPERADMIN';
+          userEmail === 'ing.ballesteros16@gmail.com';
         
         setIsAdmin(isAdminUser);
         setIsSuperAdmin(superRole);
@@ -53,13 +49,10 @@ export function Sidebar({ isOpen, onClose }: { isOpen?: boolean, onClose?: () =>
 
   const menuItems = [
     { icon: LayoutDashboard, label: 'Dashboard', href: '/' },
-    { icon: Users, label: 'Socios', href: '/socios' },
-    { icon: CreditCard, label: 'Créditos', href: '/creditos' },
-    { icon: MessageSquare, label: 'Gestiones', href: '/gestiones' },
-    { icon: CalendarCheck, label: 'Promesas', href: '/promesas' },
-    { icon: BarChart3, label: 'Reportes', href: '/reportes' },
-    { icon: Archive, label: 'Histórico', href: '/historico', adminOnly: true },
-    { icon: Upload, label: 'Importar Avales', href: '/admin/importar', adminOnly: true },
+    { icon: Map, label: 'Mapa en Vivo', href: '/admin/mapa' },
+    { icon: Route, label: 'Rutas', href: '/admin/rutas', adminOnly: true },
+    { icon: Bus, label: 'Vehículos & Flota', href: '/admin/vehiculos', adminOnly: true },
+    { icon: Calendar, label: 'Viajes & Reservas', href: '/admin/viajes' },
     { icon: CreditCard, label: 'Renta Mensual', href: '/admin/renta', superOnly: true },
   ];
 
@@ -121,20 +114,7 @@ export function Sidebar({ isOpen, onClose }: { isOpen?: boolean, onClose?: () =>
                     <span className="font-medium">{item.label}</span>
                   </Link>
                   
-                  {index === 0 && isAdmin && (
-                    <Link 
-                      href="/admin/mapa"
-                      onClick={onClose}
-                      className={`flex items-center px-6 py-3 transition-colors gap-3 ${
-                        pathname === '/admin/mapa' 
-                          ? 'bg-blue-600/10 text-blue-400 border-r-4 border-blue-600' 
-                          : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-                      }`}
-                    >
-                      <Map size={20} />
-                      <span className="font-medium">Mapa Gestores</span>
-                    </Link>
-                  )}
+
                 </div>
               );
             })}

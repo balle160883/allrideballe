@@ -49,8 +49,8 @@ export default function LoginScreen() {
             style={styles.logo} 
             resizeMode="contain"
          />
-         <Text style={styles.title}>VestaTrack</Text>
-         <Text style={styles.subtitle}>Gestión de Cobranza Móvil</Text>
+         <Text style={styles.title}>Pro Mobile</Text>
+         <Text style={styles.subtitle}>Rutas de Transporte de Personal</Text>
       </View>
 
       <View style={styles.form}>

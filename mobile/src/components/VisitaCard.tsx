@@ -10,57 +10,68 @@ interface Props {
 }
 
 export default function VisitaCard({ visita, onPress }: Props) {
-  const isSocio = visita.tipo === 'Socio';
+  const isEnProgreso = visita.situacion === 'en_progreso';
+  const isProgramado = visita.situacion === 'programado';
+  const isFinalizado = visita.situacion === 'finalizado';
+
+  // Obtener color del badge
+  let badgeBg = '#f1f5f9';
+  let badgeColor = '#475569';
+  if (isEnProgreso) {
+    badgeBg = '#dbeafe';
+    badgeColor = '#2563eb';
+  } else if (isProgramado) {
+    badgeBg = '#fef3c7';
+    badgeColor = '#d97706';
+  } else if (isFinalizado) {
+    badgeBg = '#dcfce7';
+    badgeColor = '#166534';
+  }
+
+  // Formatear fecha y hora
+  const dateStr = new Date(visita.diasMora).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const dateDay = new Date(visita.diasMora).toLocaleDateString([], { month: 'short', day: 'numeric' });
 
   return (
     <TouchableOpacity style={styles.card} onPress={() => onPress(visita)}>
       <View style={styles.header}>
-        <View style={[styles.badge, { backgroundColor: isSocio ? '#dcfce7' : '#fef3c7' }]}>
-            <Text style={[styles.badgeText, { color: isSocio ? '#166534' : '#92400e' }]}>
+        <View style={[styles.badge, { backgroundColor: badgeBg }]}>
+            <Text style={[styles.badgeText, { color: badgeColor }]}>
                 {visita.tipo}
             </Text>
         </View>
         <View style={{ alignItems: 'flex-end' }}>
-          <Text style={styles.cuenta}>Cuenta: {visita.numCuenta}</Text>
-          <Text style={styles.socioId}>Socio/Aval: {visita.socioId}</Text>
+          <Text style={styles.cuenta}>Viaje #{visita.numCuenta}</Text>
+          <Text style={styles.socioId}>Unidad: {visita.socioId}</Text>
         </View>
       </View>
 
       <View style={styles.content}>
         <View style={styles.row}>
-          <MaterialCommunityIcons name="account" size={18} color={Colors.primary} />
+          <MaterialCommunityIcons name="bus" size={20} color={Colors.primary} />
           <Text style={styles.nombre} numberOfLines={1}>{visita.nombre}</Text>
         </View>
 
         <View style={styles.row}>
-          <MaterialCommunityIcons name="map-marker-outline" size={18} color={Colors.secondary} />
-          <Text style={styles.domicilio} numberOfLines={2}>{visita.domicilio || 'Sin domicilio registrado'}</Text>
+          <MaterialCommunityIcons name="map-marker-distance" size={18} color={Colors.secondary} />
+          <Text style={styles.domicilio} numberOfLines={2}>
+            {visita.domicilio} → {visita.colonia}
+          </Text>
         </View>
 
-        {visita.cruces ? (
-          <View style={styles.row}>
-            <MaterialCommunityIcons name="directions-fork" size={18} color={Colors.secondary} />
-            <Text style={[styles.domicilio, { fontSize: 13 }]} numberOfLines={2}>Cruces: {visita.cruces}</Text>
-          </View>
-        ) : null}
-
-        {visita.municipio ? (
-          <View style={styles.row}>
-            <MaterialCommunityIcons name="city-variant-outline" size={18} color={Colors.secondary} />
-            <Text style={[styles.domicilio, { fontSize: 13 }]} numberOfLines={1}>{visita.municipio}</Text>
-          </View>
-        ) : null}
+        <View style={styles.row}>
+          <MaterialCommunityIcons name="account-tie" size={18} color={Colors.secondary} />
+          <Text style={[styles.domicilio, { fontSize: 13 }]} numberOfLines={1}>
+            Chofer: {visita.nombreSocio}
+          </Text>
+        </View>
 
         <View style={styles.footer}>
-           <View style={styles.moraInfo}>
-              <Text style={styles.moraLabel}>Mora:</Text>
-              <Text style={styles.moraValue}>${visita.saldoAlDia.toFixed(2)}</Text>
+           <View style={styles.timeInfo}>
+              <MaterialCommunityIcons name="clock-outline" size={14} color={Colors.textMuted} />
+              <Text style={styles.timeText}>Salida: {dateDay} - {dateStr}</Text>
            </View>
-           <View style={styles.diasInfo}>
-              <Text style={styles.diasLabel}>Días:</Text>
-              <Text style={styles.diasValue}>{visita.diasMora}</Text>
-           </View>
-            <MaterialCommunityIcons name="chevron-right" size={20} color={Colors.border} />
+           <MaterialCommunityIcons name="chevron-right" size={20} color={Colors.border} />
         </View>
       </View>
     </TouchableOpacity>
@@ -93,12 +104,14 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   badgeText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: 'bold',
+    textTransform: 'uppercase',
   },
   cuenta: {
     fontSize: 12,
     color: Colors.textMuted,
+    fontWeight: 'bold',
   },
   socioId: {
     fontSize: 11,
@@ -106,7 +119,7 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   content: {
-    gap: Spacing.sm,
+    gap: Spacing.xs,
   },
   row: {
     flexDirection: 'row',
@@ -128,33 +141,20 @@ const styles = StyleSheet.create({
   footer: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     borderTopWidth: 1,
     borderTopColor: Colors.border,
     paddingTop: Spacing.sm,
     marginTop: Spacing.xs,
   },
-  moraInfo: {
-    flex: 1,
+  timeInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
   },
-  moraLabel: {
-    fontSize: 10,
-    color: Colors.textMuted,
-  },
-  moraValue: {
-    fontSize: 16,
+  timeText: {
+    fontSize: 13,
     fontWeight: 'bold',
-    color: Colors.error,
-  },
-  diasInfo: {
-    flex: 1,
-  },
-  diasLabel: {
-    fontSize: 10,
-    color: Colors.textMuted,
-  },
-  diasValue: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: Colors.accent,
+    color: Colors.text,
   },
 });
