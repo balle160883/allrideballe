@@ -22,6 +22,7 @@
     "expo-background-fetch": "~55.0.16",
     "expo-build-properties": "~55.0.14",
     "expo-constants": "~55.0.16",
+    "expo-device": "^55.0.17",
     "expo-font": "~55.0.8",
     "expo-linking": "~55.0.15",
     "expo-location": "~55.1.10",
