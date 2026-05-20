@@ -53,7 +53,8 @@
         {
           "RNMapboxMapsImpl": "mapbox"
         }
-      ]
+      ],
+      "expo-font"
     ],
     "extra": {
       "eas": {
