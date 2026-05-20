@@ -1,80 +1,106 @@
-import React from 'react';
-import { 
-  StyleSheet, 
-  View, 
-  Text, 
-  SectionList, 
-  ActivityIndicator, 
+import React, { useState } from 'react';
+import {
+  StyleSheet,
+  View,
+  Text,
+  FlatList,
+  ActivityIndicator,
   RefreshControl,
   TouchableOpacity,
-  TextInput
+  TextInput,
+  Alert,
 } from 'react-native';
 import { Colors, Spacing } from '../constants/theme';
-import { useGroupedVisitas, Visita } from '../hooks/useVisitas';
-import VisitaCard from '../components/VisitaCard';
+import { useViajes, Viaje } from '../hooks/useVisitas';
+import ViajeCard from '../components/VisitaCard';
 import { useFocusEffect } from '@react-navigation/native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useProximityAlert } from '../hooks/useProximityAlert';
+import RatingModal from '../components/RatingModal';
+
+type Tab = 'activos' | 'completados';
 
 export default function VisitasScreen({ navigation }: any) {
-  const { sections, loading, refresh } = useGroupedVisitas();
-  const [searchQuery, setSearchQuery] = React.useState('');
-  const [activeTab, setActiveTab] = React.useState<'pendientes' | 'realizadas'>('pendientes');
-  
+  const { viajes, loading, refresh, calificarViaje } = useViajes();
+  const [searchQuery, setSearchQuery] = useState('');
+  const [activeTab, setActiveTab] = useState<Tab>('activos');
+  const [ratingModalVisible, setRatingModalVisible] = useState(false);
+  const [viajeACalificar, setViajeACalificar] = useState<Viaje | null>(null);
+
+  const handleNavigateToViaje = (viaje: Viaje) => {
+    navigation.navigate('DetalleVisita', { visita: viaje });
+  };
+
+  const handleCalificarPress = (viaje: Viaje) => {
+    setViajeACalificar(viaje);
+    setRatingModalVisible(true);
+  };
+
+  const handleSubmitRating = async (rating: number, comment?: string) => {
+    if (!viajeACalificar) return;
+    await calificarViaje(viajeACalificar.viaje_id, viajeACalificar.reserva_id, rating, comment);
+  };
+
+  useProximityAlert(viajes, handleNavigateToViaje);
+
   useFocusEffect(
     React.useCallback(() => {
       refresh();
     }, [])
   );
 
-  const handleVisitaPress = (visita: Visita) => {
-    navigation.navigate('DetalleVisita', { visita });
-  };
+  const handleViajePress = handleNavigateToViaje;
 
-  // Activa alertas de proximidad basadas en la lista original completa
-  const allVisitas = sections.reduce((acc: any[], curr: any) => [...acc, ...curr.data], []);
-  useProximityAlert(allVisitas, handleVisitaPress);
+  const filtered = React.useMemo(() => {
+    const byTab = viajes.filter(v =>
+      activeTab === 'activos' ? !v.isRealizada : v.isRealizada
+    );
+    if (!searchQuery.trim()) return byTab;
+    const q = searchQuery.toLowerCase();
+    return byTab.filter(v =>
+      v.ruta_nombre.toLowerCase().includes(q) ||
+      v.destino.toLowerCase().includes(q) ||
+      v.origen.toLowerCase().includes(q) ||
+      v.conductor_nombre.toLowerCase().includes(q)
+    );
+  }, [viajes, searchQuery, activeTab]);
 
-  const filteredSections = React.useMemo(() => {
-    // 1. Filtrar por pestaña primero
-    let baseSections = sections.map((section: any) => ({
-      ...section,
-      data: section.data.filter((visita: Visita) => 
-        activeTab === 'pendientes' ? !visita.isRealizada : visita.isRealizada
-      )
-    })).filter((section: any) => section.data.length > 0);
+  const activos = viajes.filter(v => !v.isRealizada);
+  const completados = viajes.filter(v => v.isRealizada);
+  const enProgreso = viajes.filter(v => v.estado === 'en_ruta');
 
-    // 2. Filtrar por búsqueda
-    if (!searchQuery) return baseSections;
-    const lowerQuery = searchQuery.toLowerCase();
-    
-    return baseSections.map((section: any) => ({
-      ...section,
-      data: section.data.filter((visita: Visita) => 
-        visita.colonia?.toLowerCase().includes(lowerQuery) || 
-        visita.domicilio?.toLowerCase().includes(lowerQuery) ||
-        visita.nombre?.toLowerCase().includes(lowerQuery)
-      )
-    })).filter((section: any) => section.data.length > 0);
-  }, [sections, searchQuery, activeTab]);
-
-
-
-  if (loading && sections.length === 0) {
+  if (loading && viajes.length === 0) {
     return (
       <View style={styles.center}>
         <ActivityIndicator size="large" color={Colors.primary} />
+        <Text style={styles.loadingText}>Cargando itinerario...</Text>
       </View>
     );
   }
 
   return (
     <View style={styles.container}>
+      {/* Banner si hay viaje en progreso */}
+      {enProgreso.length > 0 && (
+        <TouchableOpacity
+          style={styles.liveBanner}
+          onPress={() => handleViajePress(enProgreso[0])}
+        >
+          <View style={styles.liveDot} />
+          <MaterialCommunityIcons name="bus-clock" size={18} color="#fff" />
+          <Text style={styles.liveBannerText}>
+            Viaje en curso: {enProgreso[0].ruta_nombre} — Toca para ver
+          </Text>
+          <MaterialCommunityIcons name="chevron-right" size={18} color="#fff" />
+        </TouchableOpacity>
+      )}
+
+      {/* Buscador */}
       <View style={styles.searchContainer}>
         <MaterialCommunityIcons name="magnify" size={20} color={Colors.textMuted} />
-        <TextInput 
+        <TextInput
           style={styles.searchInput}
-          placeholder="Buscar por ruta o destino..."
+          placeholder="Buscar por ruta, destino o conductor..."
           value={searchQuery}
           onChangeText={setSearchQuery}
           clearButtonMode="while-editing"
@@ -82,68 +108,101 @@ export default function VisitasScreen({ navigation }: any) {
         />
       </View>
 
+      {/* Pestañas */}
       <View style={styles.tabsContainer}>
-        <TouchableOpacity 
-          style={[styles.tab, activeTab === 'pendientes' && styles.activeTab]} 
-          onPress={() => setActiveTab('pendientes')}
+        <TouchableOpacity
+          style={[styles.tab, activeTab === 'activos' && styles.activeTab]}
+          onPress={() => setActiveTab('activos')}
         >
-          <MaterialCommunityIcons 
-            name="clock-outline" 
-            size={18} 
-            color={activeTab === 'pendientes' ? Colors.primary : Colors.textMuted} 
+          <MaterialCommunityIcons
+            name="bus"
+            size={16}
+            color={activeTab === 'activos' ? Colors.primary : Colors.textMuted}
           />
-          <Text style={[styles.tabText, activeTab === 'pendientes' && styles.activeTabText]}>
-            Activas
+          <Text style={[styles.tabText, activeTab === 'activos' && styles.activeTabText]}>
+            Activos
           </Text>
+          {activos.length > 0 && (
+            <View style={[styles.tabBadge, activeTab === 'activos' && styles.tabBadgeActive]}>
+              <Text style={[styles.tabBadgeText, activeTab === 'activos' && styles.tabBadgeTextActive]}>
+                {activos.length}
+              </Text>
+            </View>
+          )}
         </TouchableOpacity>
-        
-        <TouchableOpacity 
-          style={[styles.tab, activeTab === 'realizadas' && styles.activeTab]} 
-          onPress={() => setActiveTab('realizadas')}
+
+        <TouchableOpacity
+          style={[styles.tab, activeTab === 'completados' && styles.activeTab]}
+          onPress={() => setActiveTab('completados')}
         >
-          <MaterialCommunityIcons 
-            name="check-circle-outline" 
-            size={18} 
-            color={activeTab === 'realizadas' ? Colors.primary : Colors.textMuted} 
+          <MaterialCommunityIcons
+            name="check-circle-outline"
+            size={16}
+            color={activeTab === 'completados' ? Colors.primary : Colors.textMuted}
           />
-          <Text style={[styles.tabText, activeTab === 'realizadas' && styles.activeTabText]}>
-            Completadas
+          <Text style={[styles.tabText, activeTab === 'completados' && styles.activeTabText]}>
+            Completados
           </Text>
+          {completados.length > 0 && (
+            <View style={[styles.tabBadge, activeTab === 'completados' && styles.tabBadgeActive]}>
+              <Text style={[styles.tabBadgeText, activeTab === 'completados' && styles.tabBadgeTextActive]}>
+                {completados.length}
+              </Text>
+            </View>
+          )}
         </TouchableOpacity>
       </View>
 
-      <SectionList
-        sections={filteredSections}
+      {/* Lista */}
+      <FlatList
+        data={filtered}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => (
-          <VisitaCard visita={item} onPress={handleVisitaPress} />
-        )}
-        renderSectionHeader={({ section: { title } }) => (
-          <View style={styles.sectionHeader}>
-            <MaterialCommunityIcons name="map-marker" size={16} color={Colors.secondary} />
-            <Text style={styles.sectionTitle}>SERVICIO: {title}</Text>
+          <View style={styles.cardContainer}>
+            <ViajeCard viaje={item} onPress={handleViajePress} />
+            {item.isRealizada && (
+              <TouchableOpacity
+                style={styles.rateButton}
+                onPress={() => handleCalificarPress(item)}
+              >
+                <MaterialCommunityIcons name="star" size={18} color={Colors.primary} />
+                <Text style={styles.rateButtonText}>Calificar viaje</Text>
+              </TouchableOpacity>
+            )}
           </View>
         )}
         contentContainerStyle={styles.list}
-        stickySectionHeadersEnabled={false}
         refreshControl={
           <RefreshControl refreshing={loading} onRefresh={refresh} colors={[Colors.primary]} />
         }
         ListEmptyComponent={
           <View style={styles.emptyState}>
-            <MaterialCommunityIcons 
-              name={activeTab === 'pendientes' ? "playlist-check" : "history"} 
-              size={64} 
-              color={Colors.border} 
+            <MaterialCommunityIcons
+              name={activeTab === 'activos' ? 'bus-clock' : 'history'}
+              size={64}
+              color={Colors.border}
             />
-            <Text style={styles.emptyText}>
-              {activeTab === 'pendientes' 
-                ? "No tienes rutas activas para hoy." 
-                : "No hay rutas completadas registradas aún."}
+            <Text style={styles.emptyTitle}>
+              {activeTab === 'activos' ? 'Sin viajes activos' : 'Sin viajes completados'}
+            </Text>
+            <Text style={styles.emptySubtitle}>
+              {activeTab === 'activos'
+                ? 'No tienes rutas asignadas para hoy.'
+                : 'Los viajes finalizados aparecerán aquí.'}
             </Text>
           </View>
         }
       />
+
+      {/* Modal de calificación */}
+      {viajeACalificar && (
+        <RatingModal
+          visible={ratingModalVisible}
+          onClose={() => setRatingModalVisible(false)}
+          onSubmit={handleSubmitRating}
+          viajeNombre={viajeACalificar.ruta_nombre}
+        />
+      )}
     </View>
   );
 }
@@ -157,6 +216,33 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    gap: 12,
+  },
+  loadingText: {
+    color: Colors.textMuted,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  liveBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: Colors.primary,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: 10,
+  },
+  liveDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#fff',
+    opacity: 0.9,
+  },
+  liveBannerText: {
+    flex: 1,
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '700',
   },
   searchContainer: {
     flexDirection: 'row',
@@ -165,22 +251,22 @@ const styles = StyleSheet.create({
     margin: Spacing.md,
     marginBottom: 0,
     paddingHorizontal: Spacing.md,
-    borderRadius: Spacing.md,
-    height: 50,
+    borderRadius: 12,
+    height: 48,
     borderWidth: 1,
     borderColor: Colors.border,
   },
   searchInput: {
     flex: 1,
     marginLeft: Spacing.sm,
-    fontSize: 16,
+    fontSize: 15,
     color: Colors.text,
   },
   tabsContainer: {
     flexDirection: 'row',
-    marginTop: Spacing.sm,
-    marginHorizontal: Spacing.md,
-    borderRadius: Spacing.sm,
+    margin: Spacing.md,
+    marginBottom: 4,
+    borderRadius: 10,
     padding: 4,
     backgroundColor: '#f1f5f9',
   },
@@ -189,56 +275,83 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 10,
-    borderRadius: 6,
-    gap: 6,
+    paddingVertical: 9,
+    borderRadius: 8,
+    gap: 5,
   },
   activeTab: {
     backgroundColor: '#fff',
-    shadowS: {
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.1,
-        shadowRadius: 2,
-        elevation: 2,
-    }
-  } as any,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 3,
+    elevation: 2,
+  },
   tabText: {
-    fontSize: 14,
-    fontWeight: '600',
+    fontSize: 13,
+    fontWeight: '700',
     color: Colors.textMuted,
   },
   activeTabText: {
     color: Colors.primary,
   },
-  sectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#e0f2fe', // Sky 100
-    padding: Spacing.sm,
-    paddingHorizontal: Spacing.md,
-    marginTop: Spacing.md,
-    marginBottom: Spacing.sm,
-    borderRadius: 8,
-    borderLeftWidth: 4,
-    borderLeftColor: Colors.primary,
-    gap: Spacing.sm,
+  tabBadge: {
+    backgroundColor: Colors.border,
+    borderRadius: 10,
+    paddingHorizontal: 6,
+    paddingVertical: 1,
   },
-  sectionTitle: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: Colors.secondary,
+  tabBadgeActive: {
+    backgroundColor: '#dbeafe',
+  },
+  tabBadgeText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: Colors.textMuted,
+  },
+  tabBadgeTextActive: {
+    color: Colors.primary,
   },
   list: {
     padding: Spacing.md,
+    paddingTop: Spacing.sm,
+  },
+  cardContainer: {
+    marginBottom: Spacing.sm,
+  },
+  rateButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: Colors.background,
+    paddingVertical: 8,
+    paddingHorizontal: Spacing.md,
+    borderRadius: 12,
+    marginTop: 4,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  rateButtonText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: Colors.primary,
   },
   emptyState: {
-    paddingTop: 100,
+    paddingTop: 80,
     justifyContent: 'center',
     alignItems: 'center',
+    gap: 8,
   },
-  emptyText: {
-    color: Colors.textMuted,
+  emptyTitle: {
     fontSize: 16,
+    fontWeight: '800',
+    color: Colors.text,
+  },
+  emptySubtitle: {
+    fontSize: 13,
+    color: Colors.textMuted,
+    textAlign: 'center',
+    paddingHorizontal: 32,
   },
 });

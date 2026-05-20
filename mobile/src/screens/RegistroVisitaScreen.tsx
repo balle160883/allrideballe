@@ -20,6 +20,8 @@ export default function RegistroVisitaScreen({ route, navigation }: any) {
   const [reportType, setReportType] = useState('retraso');
   const [reportDesc, setReportDesc] = useState('');
 
+  const viajeId = visita.viaje_id || visita.id;
+
   const handleValidateCard = async () => {
     if (!cardId.trim()) {
       Alert.alert('Error', 'Por favor ingresa o escanea el ID de la tarjeta del pasajero.');
@@ -29,7 +31,7 @@ export default function RegistroVisitaScreen({ route, navigation }: any) {
     setLoading(true);
     try {
       // Registrar abordaje por RFID / ID tarjeta
-      const response = await api.post(`/transporte/viajes/${visita.id}/abordar`, {
+      const response = await api.post(`/transporte/viajes/${viajeId}/abordar`, {
         identificador_tarjeta: cardId.trim()
       });
 
@@ -53,7 +55,7 @@ export default function RegistroVisitaScreen({ route, navigation }: any) {
     setLoading(true);
     try {
       await api.post(`/transporte/alertas`, {
-        viaje_id: Number(visita.id),
+        viaje_id: Number(viajeId),
         tipo: reportType,
         descripcion: reportDesc.trim()
       });
@@ -72,8 +74,8 @@ export default function RegistroVisitaScreen({ route, navigation }: any) {
     <ScrollView style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>Validador & Alertas</Text>
-        <Text style={styles.subtitle}>{visita.nombre}</Text>
-        <Text style={styles.cuenta}>Viaje ID: #{visita.id}</Text>
+        <Text style={styles.subtitle}>{visita.ruta_nombre || visita.nombre}</Text>
+        <Text style={styles.cuenta}>Viaje ID: #{viajeId}</Text>
       </View>
 
       {/* RFID Validation Section */}
@@ -109,10 +111,10 @@ export default function RegistroVisitaScreen({ route, navigation }: any) {
         <Text style={styles.inputLabel}>Tipo de Retraso/Alerta</Text>
         <View style={styles.optionsGrid}>
           {[
-            { label: 'Tráfico', value: 'retraso', icon: 'bus-clock' },
-            { label: 'Desvío', value: 'desvio', icon: 'directions-fork' },
-            { label: 'Avería', value: 'accidente', icon: 'engine-outline' },
-            { label: 'Obstrucción', value: 'bloqueo', icon: 'alert-octagon-outline' },
+            { label: 'Desvío', value: 'desvio_ruta', icon: 'directions-fork' },
+            { label: 'Retraso', value: 'atraso_proyectado', icon: 'bus-clock' },
+            { label: 'Inicio Tardío', value: 'inicio_tardio', icon: 'clock-alert' },
+            { label: 'No Abordado', value: 'no_abordado', icon: 'account-off' },
           ].map((opt) => (
             <TouchableOpacity 
               key={opt.value}

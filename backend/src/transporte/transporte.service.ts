@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { DatabaseService } from '../database/database.service';
+import * as bcrypt from 'bcrypt';
 
 @Injectable()
 export class TransporteService {
@@ -82,6 +83,45 @@ export class TransporteService {
     return result.rows;
   }
 
+  async getReservasPasajero(pasajeroId: string) {
+    const result = await this.databaseService.query(
+      `SELECT
+        r.id              AS reserva_id,
+        r.asiento_numero,
+        r.estado          AS reserva_estado,
+        v.id              AS viaje_id,
+        v.estado          AS viaje_estado,
+        v.fecha_hora_salida,
+        ru.nombre         AS ruta_nombre,
+        ru.origen,
+        ru.destino,
+        ru.paradas,
+        ve.patente,
+        ve.modelo,
+        ve.capacidad,
+        u.nombre          AS conductor_nombre,
+        (
+          SELECT row_to_json(ul)
+          FROM (
+            SELECT latitud, longitud, velocidad, timestamp
+            FROM ubicaciones_flota
+            WHERE viaje_id = v.id
+            ORDER BY timestamp DESC
+            LIMIT 1
+          ) ul
+        ) AS ultima_ubicacion
+      FROM reservas r
+      JOIN viajes v   ON r.viaje_id   = v.id
+      JOIN rutas  ru  ON v.ruta_id    = ru.id
+      JOIN vehiculos ve ON v.vehiculo_id = ve.id
+      LEFT JOIN usuarios u ON v.conductor_id = u.id
+      WHERE r.pasajero_id = $1
+      ORDER BY v.fecha_hora_salida DESC`,
+      [pasajeroId]
+    );
+    return result.rows;
+  }
+
   // ==========================================
   // VIAJES (SERVICIOS PROGRAMADOS)
   // ==========================================
@@ -133,7 +173,7 @@ export class TransporteService {
       `SELECT r.*, u.nombre as pasajero_nombre, u.email as pasajero_email, u.identificador_tarjeta
        FROM "reservas" r
        LEFT JOIN "usuarios" u ON r.pasajero_id = u.id
-       WHERE r.viaje_id = $1
+       WHERE r.viaje_id = $1 AND r.estado IN ('reservado', 'confirmado')
        ORDER BY r.asiento_numero ASC`,
       [viajeId]
     );
@@ -155,6 +195,138 @@ export class TransporteService {
     );
     return result.rows[0];
   }
+
+  async getViajesDisponibles(pasajeroId: string) {
+    const result = await this.databaseService.query(
+      `SELECT v.id, v.fecha_hora_salida, v.estado as viaje_estado,
+              ru.nombre as ruta_nombre, ru.origen, ru.destino, ru.paradas,
+              ve.patente, ve.modelo, ve.capacidad,
+              (
+                SELECT count(*)::int
+                FROM "reservas" res
+                WHERE res.viaje_id = v.id AND res.estado != 'cancelado' AND res.estado != 'rechazado'
+              ) AS ocupados
+       FROM "viajes" v
+       JOIN "rutas" ru ON v.ruta_id = ru.id
+       JOIN "vehiculos" ve ON v.vehiculo_id = ve.id
+       WHERE v.estado = 'programado'
+         AND NOT EXISTS (
+           SELECT 1 FROM "reservas" res2
+           WHERE res2.viaje_id = v.id AND res2.pasajero_id = $1 AND res2.estado != 'cancelado' AND res2.estado != 'rechazado'
+         )
+       ORDER BY v.fecha_hora_salida ASC`,
+      [pasajeroId]
+    );
+    return result.rows;
+  }
+
+  async solicitarReserva(pasajeroId: string, viajeId: number) {
+    // 1. Obtener capacidad y validar viaje
+    const viajeResult = await this.databaseService.query(
+      `SELECT v.*, ve.capacidad
+       FROM "viajes" v
+       JOIN "vehiculos" ve ON v.vehiculo_id = ve.id
+       WHERE v.id = $1`,
+      [viajeId]
+    );
+    if (viajeResult.rows.length === 0) {
+      throw new Error('Viaje no encontrado');
+    }
+    const viaje = viajeResult.rows[0];
+    if (viaje.estado !== 'programado') {
+      throw new Error('El viaje ya no está programado para reservas');
+    }
+
+    // 2. Verificar duplicado
+    const dupCheck = await this.databaseService.query(
+      `SELECT id FROM "reservas" 
+       WHERE viaje_id = $1 AND pasajero_id = $2 AND estado != 'cancelado' AND estado != 'rechazado'`,
+      [viajeId, pasajeroId]
+    );
+    if (dupCheck.rows.length > 0) {
+      throw new Error('Ya tienes una solicitud o reserva activa para este viaje');
+    }
+
+    // 3. Buscar asientos ocupados para auto-asignar el siguiente libre (Opción A)
+    const asientosResult = await this.databaseService.query(
+      `SELECT asiento_numero FROM "reservas" 
+       WHERE viaje_id = $1 AND estado != 'cancelado' AND estado != 'rechazado' 
+       ORDER BY asiento_numero ASC`,
+      [viajeId]
+    );
+    const ocupados = new Set(asientosResult.rows.map(r => r.asiento_numero));
+    
+    let asientoSugerido = -1;
+    for (let i = 1; i <= viaje.capacidad; i++) {
+      if (!ocupados.has(i)) {
+        asientoSugerido = i;
+        break;
+      }
+    }
+
+    if (asientoSugerido === -1) {
+      throw new Error('El vehículo de este viaje ya se encuentra a su máxima capacidad');
+    }
+
+    // 4. Crear reserva en estado pendiente_aprobacion
+    const insertResult = await this.databaseService.query(
+      `INSERT INTO "reservas" ("viaje_id", "pasajero_id", "asiento_numero", "estado")
+       VALUES ($1, $2, $3, 'pendiente_aprobacion') RETURNING *`,
+      [viajeId, pasajeroId, asientoSugerido]
+    );
+    return insertResult.rows[0];
+  }
+
+  async getReservasPendientes() {
+    const result = await this.databaseService.query(
+      `SELECT r.*, 
+              u.nombre as pasajero_nombre, u.email as pasajero_email,
+              v.fecha_hora_salida, v.estado as viaje_estado,
+              ru.nombre as ruta_nombre, ru.origen, ru.destino,
+              ve.patente, ve.modelo
+       FROM "reservas" r
+       JOIN "usuarios" u ON r.pasajero_id = u.id
+       JOIN "viajes" v ON r.viaje_id = v.id
+       JOIN "rutas" ru ON v.ruta_id = ru.id
+       JOIN "vehiculos" ve ON v.vehiculo_id = ve.id
+       WHERE r.estado = 'pendiente_aprobacion'
+       ORDER BY v.fecha_hora_salida ASC`
+    );
+    return result.rows;
+  }
+
+  async aprobarReserva(reservaId: number, approvedBy: string, notas?: string) {
+    const result = await this.databaseService.query(
+      `UPDATE "reservas"
+       SET "estado" = 'reservado',
+           "aprobado_por" = $1,
+           "fecha_aprobacion" = CURRENT_TIMESTAMP,
+           "notas_gerente" = $2
+       WHERE "id" = $3 RETURNING *`,
+      [approvedBy, notas || null, reservaId]
+    );
+    if (result.rows.length === 0) {
+      throw new Error('Reserva no encontrada');
+    }
+    return result.rows[0];
+  }
+
+  async rechazarReserva(reservaId: number, approvedBy: string, notas?: string) {
+    const result = await this.databaseService.query(
+      `UPDATE "reservas"
+       SET "estado" = 'rechazado',
+           "aprobado_por" = $1,
+           "fecha_aprobacion" = CURRENT_TIMESTAMP,
+           "notas_gerente" = $2
+       WHERE "id" = $3 RETURNING *`,
+      [approvedBy, notas || null, reservaId]
+    );
+    if (result.rows.length === 0) {
+      throw new Error('Reserva no encontrada');
+    }
+    return result.rows[0];
+  }
+
 
   // ==========================================
   // GPS / UBICACIONES DE FLOTA
@@ -212,4 +384,485 @@ export class TransporteService {
     );
     return result.rows[0];
   }
+
+  async abordarPasajero(viajeId: number, identificadorTarjeta: string) {
+    // 1. Buscar pasajero por su identificador de tarjeta (QR o RFID)
+    const userResult = await this.databaseService.query(
+      'SELECT id, nombre, email, rol, "identificador_tarjeta" FROM "usuarios" WHERE "identificador_tarjeta" = $1 AND "rol" = \'pasajero\'',
+      [identificadorTarjeta]
+    );
+
+    if (userResult.rows.length === 0) {
+      throw new Error('La tarjeta o código QR no pertenece a ningún pasajero registrado.');
+    }
+
+    const passenger = userResult.rows[0];
+
+    // 2. Buscar la reservación para este pasajero en este viaje específico
+    const reservaResult = await this.databaseService.query(
+      'SELECT * FROM "reservas" WHERE "viaje_id" = $1 AND "pasajero_id" = $2',
+      [viajeId, passenger.id]
+    );
+
+    if (reservaResult.rows.length === 0) {
+      throw new Error(`El pasajero ${passenger.nombre} no tiene una reservación activa para este viaje.`);
+    }
+
+    const reserva = reservaResult.rows[0];
+
+    if (reserva.estado === 'pendiente_aprobacion') {
+      throw new Error(`La solicitud de reservación de ${passenger.nombre} aún está pendiente de aprobación por su gerente.`);
+    }
+
+    if (reserva.estado === 'rechazado') {
+      throw new Error(`La solicitud de reservación de ${passenger.nombre} fue rechazada.`);
+    }
+
+    if (reserva.estado === 'confirmado' || reserva.estado === 'abordado') {
+      throw new Error(`El pasajero ${passenger.nombre} ya abordó previamente.`);
+    }
+
+    if (reserva.estado === 'cancelado') {
+      throw new Error(`La reservación de ${passenger.nombre} para este viaje está cancelada.`);
+    }
+
+    // 3. Registrar el abordaje marcando la reserva como 'confirmado' (abordado)
+    // El frontend Next.js y la app de Expo usan 'confirmado' para marcar el abordaje exitoso
+    const updateResult = await this.databaseService.query(
+      'UPDATE "reservas" SET "estado" = \'confirmado\' WHERE "id" = $1 RETURNING *',
+      [reserva.id]
+    );
+
+    const updatedReserva = updateResult.rows[0];
+
+    return {
+      success: true,
+      reserva: {
+        ...updatedReserva,
+        pasajero_nombre: passenger.nombre,
+        pasajero_email: passenger.email,
+        identificador_tarjeta: passenger.identificador_tarjeta,
+      },
+    };
+  }
+
+  async createPasajero(data: { email: string; nombre: string; identificador_tarjeta: string }) {
+    const emailLower = data.email.trim().toLowerCase();
+    const emailCheck = await this.databaseService.query(
+      'SELECT id FROM "usuarios" WHERE "email" = $1',
+      [emailLower]
+    );
+    if (emailCheck.rows.length > 0) {
+      throw new Error('El correo electrónico ya está registrado.');
+    }
+
+    const passwordHash = await bcrypt.hash('Pasajero2026@', 10);
+
+    const result = await this.databaseService.query(
+      'INSERT INTO "usuarios" ("email", "password_hash", "nombre", "rol", "identificador_tarjeta") VALUES ($1, $2, $3, \'pasajero\', $4) RETURNING "id", "email", "nombre", "rol", "identificador_tarjeta"',
+      [emailLower, passwordHash, data.nombre.trim(), data.identificador_tarjeta?.trim() || null]
+    );
+
+    return result.rows[0];
+  }
+
+  async updatePasajero(id: string, data: { email?: string; nombre?: string; identificador_tarjeta?: string }) {
+    if (data.email) {
+      const emailLower = data.email.trim().toLowerCase();
+      const emailCheck = await this.databaseService.query(
+        'SELECT id FROM "usuarios" WHERE "email" = $1 AND "id" != $2',
+        [emailLower, id]
+      );
+      if (emailCheck.rows.length > 0) {
+        throw new Error('El correo electrónico ya está registrado por otro usuario.');
+      }
+    }
+
+    const fields: string[] = [];
+    const values: any[] = [];
+    let placeholderIdx = 1;
+
+    if (data.nombre !== undefined) {
+      fields.push(`"nombre" = $${placeholderIdx++}`);
+      values.push(data.nombre.trim());
+    }
+    if (data.email !== undefined) {
+      fields.push(`"email" = $${placeholderIdx++}`);
+      values.push(data.email.trim().toLowerCase());
+    }
+    if (data.identificador_tarjeta !== undefined) {
+      fields.push(`"identificador_tarjeta" = $${placeholderIdx++}`);
+      values.push(data.identificador_tarjeta?.trim() || null);
+    }
+
+    if (fields.length === 0) {
+      throw new Error('No hay campos para actualizar.');
+    }
+
+    values.push(id);
+    const sql = `UPDATE "usuarios" SET ${fields.join(', ')} WHERE "id" = $${placeholderIdx} RETURNING "id", "email", "nombre", "rol", "identificador_tarjeta"`;
+    const result = await this.databaseService.query(sql, values);
+
+    if (result.rows.length === 0) {
+      throw new Error('Pasajero no encontrado.');
+    }
+
+    return result.rows[0];
+  }
+
+  async deletePasajero(id: string) {
+    const result = await this.databaseService.query(
+      'DELETE FROM "usuarios" WHERE "id" = $1 AND "rol" = \'pasajero\' RETURNING *',
+      [id]
+    );
+    if (result.rows.length === 0) {
+      throw new Error('Pasajero no encontrado o no tiene rol de pasajero.');
+    }
+    return { success: true, message: 'Pasajero eliminado correctamente.' };
+  }
+
+  async setDomicilioPasajero(pasajeroId: string, data: { direccion: string; latitud: number; longitud: number }) {
+    const result = await this.databaseService.query(
+      'UPDATE "usuarios" SET "direccion" = $1, "latitud" = $2, "longitud" = $3 WHERE "id" = $4 RETURNING "id", "direccion", "latitud", "longitud"',
+      [data.direccion, data.latitud, data.longitud, pasajeroId]
+    );
+    if (result.rows.length === 0) {
+      throw new Error('Pasajero no encontrado.');
+    }
+    return result.rows[0];
+  }
+
+  async generarSmartRutas(maxDistanciaKm: number = 2.5, maxPasajerosPorRuta: number = 15) {
+    const res = await this.databaseService.query(
+      `SELECT id, nombre, email, direccion, latitud, longitud 
+       FROM "usuarios" 
+       WHERE rol = 'pasajero' AND latitud IS NOT NULL AND longitud IS NOT NULL`
+    );
+    const passengers = res.rows.map(r => ({
+      id: r.id,
+      nombre: r.nombre,
+      email: r.email,
+      direccion: r.direccion,
+      latitud: Number(r.latitud),
+      longitud: Number(r.longitud)
+    }));
+
+    if (passengers.length === 0) {
+      return [];
+    }
+
+    const destinoBase = {
+      nombre: "Planta Industrial Norte",
+      latitud: 20.753,
+      longitud: -103.415
+    };
+
+    const getDistanceKm = (lat1: number, lon1: number, lat2: number, lon2: number) => {
+      const R = 6371;
+      const dLat = (lat2 - lat1) * Math.PI / 180;
+      const dLon = (lon2 - lon1) * Math.PI / 180;
+      const a = 
+        Math.sin(dLat/2) * Math.sin(dLat/2) +
+        Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+        Math.sin(dLon/2) * Math.sin(dLon/2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+      return R * c;
+    };
+
+    interface Cluster {
+      id: number;
+      centroidLat: number;
+      centroidLng: number;
+      passengers: typeof passengers;
+    }
+    const clusters: Cluster[] = [];
+    let clusterCounter = 0;
+
+    for (const passenger of passengers) {
+      let assignedCluster: Cluster | null = null;
+      let minDistance = Infinity;
+
+      for (const cluster of clusters) {
+        if (cluster.passengers.length >= maxPasajerosPorRuta) continue;
+        const dist = getDistanceKm(passenger.latitud, passenger.longitud, cluster.centroidLat, cluster.centroidLng);
+        if (dist <= maxDistanciaKm && dist < minDistance) {
+          minDistance = dist;
+          assignedCluster = cluster;
+        }
+      }
+
+      if (assignedCluster) {
+        assignedCluster.passengers.push(passenger);
+        const total = assignedCluster.passengers.length;
+        assignedCluster.centroidLat = assignedCluster.passengers.reduce((sum, p) => sum + p.latitud, 0) / total;
+        assignedCluster.centroidLng = assignedCluster.passengers.reduce((sum, p) => sum + p.longitud, 0) / total;
+      } else {
+        clusters.push({
+          id: ++clusterCounter,
+          centroidLat: passenger.latitud,
+          centroidLng: passenger.longitud,
+          passengers: [passenger]
+        });
+      }
+    }
+
+    const suggestedRoutes: any[] = [];
+    const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+
+    for (let idx = 0; idx < clusters.length; idx++) {
+      const cluster = clusters[idx];
+      const routeLabel = alphabet[idx % alphabet.length];
+      
+      interface ParadaSugerida {
+        nombre: string;
+        latitud: number;
+        longitud: number;
+        pasajeros: typeof passengers;
+      }
+      const paradasTemp: ParadaSugerida[] = [];
+
+      for (const p of cluster.passengers) {
+        let foundParada: ParadaSugerida | null = null;
+        for (const pt of paradasTemp) {
+          if (getDistanceKm(p.latitud, p.longitud, pt.latitud, pt.longitud) <= 0.3) {
+            foundParada = pt;
+            break;
+          }
+        }
+
+        if (foundParada) {
+          foundParada.pasajeros.push(p);
+          const count = foundParada.pasajeros.length;
+          foundParada.latitud = foundParada.pasajeros.reduce((sum, px) => sum + px.latitud, 0) / count;
+          foundParada.longitud = foundParada.pasajeros.reduce((sum, px) => sum + px.longitud, 0) / count;
+        } else {
+          paradasTemp.push({
+            nombre: `Parada ${routeLabel}-${paradasTemp.length + 1}`,
+            latitud: p.latitud,
+            longitud: p.longitud,
+            pasajeros: [p]
+          });
+        }
+      }
+
+      const sortedParadas = paradasTemp.map(p => ({
+        ...p,
+        distanceToDest: getDistanceKm(p.latitud, p.longitud, destinoBase.latitud, destinoBase.longitud)
+      })).sort((a, b) => b.distanceToDest - a.distanceToDest);
+
+      const finalParadas = sortedParadas.map((p, index) => ({
+        orden: index + 1,
+        nombre: p.nombre,
+        latitud: p.latitud,
+        longitud: p.longitud,
+        pasajeros: p.pasajeros
+      }));
+
+      const vehiculoRes = await this.databaseService.query('SELECT id, patente FROM "vehiculos" LIMIT 1 OFFSET $1', [idx]);
+      const conductorRes = await this.databaseService.query('SELECT id, nombre FROM "usuarios" WHERE rol = \'conductor\' LIMIT 1 OFFSET $1', [idx]);
+
+      const vehiculo = vehiculoRes.rows[0] ?? null;
+      const conductor = conductorRes.rows[0] ?? null;
+
+      suggestedRoutes.push({
+        id: cluster.id,
+        nombre: `Ruta Inteligente ${routeLabel} (Zona: ${cluster.centroidLat.toFixed(4)}, ${cluster.centroidLng.toFixed(4)})`,
+        origen: finalParadas[0]?.nombre || "Origen Personalizado",
+        destino: destinoBase.nombre,
+        destinoLat: destinoBase.latitud,
+        destinoLng: destinoBase.longitud,
+        paradas: finalParadas,
+        pasajeros: cluster.passengers,
+        vehiculo_id: vehiculo?.id ?? null,
+        vehiculo_patente: vehiculo?.patente ?? null,
+        conductor_id: conductor?.id ?? null,
+        conductor_nombre: conductor?.nombre ?? null,
+      });
+    }
+
+    return suggestedRoutes;
+  }
+
+  async aplicarSmartRutas(rutasSugeridas: any[]) {
+    const client = await this.databaseService.getClient();
+    try {
+      await client.query('BEGIN');
+      const createdViajes: any[] = [];
+
+      for (const rs of rutasSugeridas) {
+        const paradasDb = rs.paradas.map((p: any) => ({
+          orden: p.orden,
+          nombre: p.nombre,
+          latitud: p.latitud,
+          longitud: p.longitud
+        }));
+
+        const rutaResult = await client.query(
+          `INSERT INTO "rutas" ("nombre", "origen", "destino", "paradas")
+           VALUES ($1, $2, $3, $4::jsonb) RETURNING id`,
+          [rs.nombre, rs.origen, rs.destino, JSON.stringify(paradasDb)]
+        );
+        const rutaId = rutaResult.rows[0].id;
+
+        const fechaSalida = new Date();
+        fechaSalida.setDate(fechaSalida.getDate() + 1);
+        fechaSalida.setHours(7, 0, 0, 0);
+
+        const viajeResult = await client.query(
+          `INSERT INTO "viajes" ("ruta_id", "vehiculo_id", "conductor_id", "fecha_hora_salida", "estado")
+           VALUES ($1, $2, $3, $4, 'programado') RETURNING id`,
+          [rutaId, rs.vehiculo_id || null, rs.conductor_id || null, fechaSalida]
+        );
+        const viajeId = viajeResult.rows[0].id;
+
+        for (let sIdx = 0; sIdx < rs.pasajeros.length; sIdx++) {
+          const p = rs.pasajeros[sIdx];
+          const asiento = sIdx + 1;
+          await client.query(
+            `INSERT INTO "reservas" ("viaje_id", "pasajero_id", "asiento_numero", "estado")
+             VALUES ($1, $2, $3, 'reservado')`,
+            [viajeId, p.id, asiento]
+          );
+        }
+
+        createdViajes.push({
+          viajeId,
+          rutaId,
+          rutaNombre: rs.nombre,
+          pasajerosCount: rs.pasajeros.length
+        });
+      }
+
+      await client.query('COMMIT');
+      return { success: true, viajes: createdViajes };
+    } catch (e) {
+      await client.query('ROLLBACK');
+      throw e;
+    } finally {
+      client.release();
+    }
+  }
+
+  async getReporteKPIs() {
+    const queryOcupacion = `
+      SELECT COALESCE(AVG(ocupados * 100.0 / NULLIF(capacidad, 0)), 0)::float as promedio_ocupacion
+      FROM (
+        SELECT 
+          v.id, 
+          ve.capacidad,
+          (SELECT COUNT(*)::int FROM "reservas" r WHERE r.viaje_id = v.id AND r.estado IN ('reservado', 'confirmado', 'no_abordado')) as ocupados
+        FROM "viajes" v
+        JOIN "vehiculos" ve ON v.vehiculo_id = ve.id
+        WHERE v.estado = 'finalizado'
+      ) q
+    `;
+    const queryViajes = `SELECT COUNT(*)::int as total_viajes FROM "viajes" WHERE estado = 'finalizado'`;
+    const queryAsistencia = `
+      SELECT 
+        COUNT(CASE WHEN r.estado = 'confirmado' THEN 1 END)::int as abordados,
+        COUNT(CASE WHEN r.estado = 'no_abordado' THEN 1 END)::int as no_shows
+      FROM "reservas" r
+      JOIN "viajes" v ON r.viaje_id = v.id
+      WHERE v.estado = 'finalizado' AND r.estado IN ('confirmado', 'no_abordado')
+    `;
+    const queryPasajeros = `
+      SELECT COUNT(DISTINCT r.pasajero_id)::int as pasajeros_unicos 
+      FROM "reservas" r
+      JOIN "viajes" v ON r.viaje_id = v.id
+      WHERE v.estado = 'finalizado' AND r.estado = 'confirmado'
+    `;
+
+    const [resOcupacion, resViajes, resAsistencia, resPasajeros] = await Promise.all([
+      this.databaseService.query(queryOcupacion),
+      this.databaseService.query(queryViajes),
+      this.databaseService.query(queryAsistencia),
+      this.databaseService.query(queryPasajeros)
+    ]);
+
+    const promOcupacion = resOcupacion.rows[0]?.promedio_ocupacion || 0;
+    const totalViajes = resViajes.rows[0]?.total_viajes || 0;
+    const abordados = resAsistencia.rows[0]?.abordados || 0;
+    const noShows = resAsistencia.rows[0]?.no_shows || 0;
+    const pasajerosUnicos = resPasajeros.rows[0]?.pasajeros_unicos || 0;
+
+    const totalReservasFinalizadas = abordados + noShows;
+    const tasaAsistencia = totalReservasFinalizadas > 0 
+      ? Math.round((abordados * 100) / totalReservasFinalizadas) 
+      : 100;
+
+    return {
+      promedioOcupacion: Math.round(promOcupacion),
+      tasaAsistencia,
+      noShows,
+      totalViajes,
+      pasajerosUnicos
+    };
+  }
+
+  async getEficienciaRutas() {
+    const sql = `
+      SELECT 
+        ru.id as ruta_id,
+        ru.nombre as ruta_nombre,
+        COUNT(v.id)::int as viajes_count,
+        COALESCE(AVG(
+          (SELECT COUNT(*)::int FROM "reservas" r WHERE r.viaje_id = v.id AND r.estado IN ('reservado', 'confirmado', 'no_abordado')) * 100.0 / NULLIF(ve.capacidad, 0)
+        ), 0)::float as promedio_ocupacion
+      FROM "viajes" v
+      JOIN "rutas" ru ON v.ruta_id = ru.id
+      JOIN "vehiculos" ve ON v.vehiculo_id = ve.id
+      WHERE v.estado = 'finalizado'
+      GROUP BY ru.id, ru.nombre
+      ORDER BY promedio_ocupacion DESC
+    `;
+    const res = await this.databaseService.query(sql);
+    return res.rows.map((row: any) => ({
+      ...row,
+      promedio_ocupacion: Math.round(row.promedio_ocupacion)
+    }));
+  }
+
+  async getAuditoriaAsistencia(filtros: { rutaId?: number; fechaInicio?: string; fechaFin?: string }) {
+    let sql = `
+      SELECT 
+        r.id as reserva_id,
+        r.asiento_numero,
+        r.estado as reserva_estado,
+        r.fecha_aprobacion,
+        u.nombre as pasajero_nombre,
+        u.email as pasajero_email,
+        ru.nombre as ruta_nombre,
+        v.fecha_hora_salida,
+        c.nombre as conductor_nombre,
+        ve.patente as vehiculo_patente
+      FROM "reservas" r
+      JOIN "usuarios" u ON r.pasajero_id = u.id
+      JOIN "viajes" v ON r.viaje_id = v.id
+      JOIN "rutas" ru ON v.ruta_id = ru.id
+      LEFT JOIN "usuarios" c ON v.conductor_id = c.id
+      LEFT JOIN "vehiculos" ve ON v.vehiculo_id = ve.id
+      WHERE v.estado = 'finalizado' AND r.estado IN ('confirmado', 'no_abordado')
+    `;
+    const params: any[] = [];
+    let paramCounter = 1;
+
+    if (filtros.rutaId) {
+      sql += ` AND v.ruta_id = $${paramCounter++}`;
+      params.push(filtros.rutaId);
+    }
+    if (filtros.fechaInicio) {
+      sql += ` AND v.fecha_hora_salida >= $${paramCounter++}`;
+      params.push(filtros.fechaInicio);
+    }
+    if (filtros.fechaFin) {
+      sql += ` AND v.fecha_hora_salida <= $${paramCounter++}`;
+      params.push(filtros.fechaFin);
+    }
+
+    sql += ` ORDER BY v.fecha_hora_salida DESC`;
+
+    const res = await this.databaseService.query(sql, params);
+    return res.rows;
+  }
 }
+

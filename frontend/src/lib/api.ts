@@ -140,6 +140,96 @@ export async function fetchPasajeros(): Promise<any[]> {
   return res.json();
 }
 
+export async function createPasajero(data: any) {
+  const res = await fetch(`${API_URL}/transporte/pasajeros`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ message: 'Error al registrar pasajero' }));
+    throw new Error(err.message || 'Failed to create pasajero');
+  }
+  return res.json();
+}
+
+export async function updatePasajero(id: string, data: any) {
+  const res = await fetch(`${API_URL}/transporte/pasajeros/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ message: 'Error al actualizar pasajero' }));
+    throw new Error(err.message || 'Failed to update passenger');
+  }
+  return res.json();
+}
+
+export async function deletePasajero(id: string) {
+  const res = await fetch(`${API_URL}/transporte/pasajeros/${id}`, {
+    method: 'DELETE',
+    headers: getAuthHeader(),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ message: 'Error al eliminar pasajero' }));
+    throw new Error(err.message || 'Failed to delete passenger');
+  }
+  return res.json();
+}
+
+export async function fetchReservasPasajero(): Promise<any[]> {
+  const res = await fetch(`${API_URL}/transporte/reservas/pasajero`, { headers: getAuthHeader() });
+  if (!res.ok) throw new Error('Failed to fetch reservas del pasajero');
+  return res.json();
+}
+
+export async function fetchViajesDisponibles(): Promise<any[]> {
+  const res = await fetch(`${API_URL}/transporte/viajes/disponibles`, { headers: getAuthHeader() });
+  if (!res.ok) throw new Error('Failed to fetch viajes disponibles');
+  return res.json();
+}
+
+export async function solicitarReserva(viajeId: number): Promise<any> {
+  const res = await fetch(`${API_URL}/transporte/reservas/solicitar`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+    body: JSON.stringify({ viaje_id: viajeId }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ message: 'Error al solicitar reserva' }));
+    throw new Error(err.message || 'Failed to request reservation');
+  }
+  return res.json();
+}
+
+export async function fetchReservasPendientes(): Promise<any[]> {
+  const res = await fetch(`${API_URL}/transporte/reservas/pendientes`, { headers: getAuthHeader() });
+  if (!res.ok) throw new Error('Failed to fetch pending reservations');
+  return res.json();
+}
+
+export async function aprobarReserva(reservaId: number, notas?: string): Promise<any> {
+  const res = await fetch(`${API_URL}/transporte/reservas/${reservaId}/aprobar`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+    body: JSON.stringify({ notas }),
+  });
+  if (!res.ok) throw new Error('Failed to approve reservation');
+  return res.json();
+}
+
+export async function rechazarReserva(reservaId: number, notas?: string): Promise<any> {
+  const res = await fetch(`${API_URL}/transporte/reservas/${reservaId}/rechazar`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+    body: JSON.stringify({ notas }),
+  });
+  if (!res.ok) throw new Error('Failed to reject reservation');
+  return res.json();
+}
+
+
 export async function fetchViajes(): Promise<any[]> {
   const res = await fetch(`${API_URL}/transporte/viajes`, { headers: getAuthHeader() });
   if (!res.ok) throw new Error('Failed to fetch viajes');
@@ -262,3 +352,61 @@ export async function upsertRenta(data: any) {
   if (!res.ok) throw new Error('Failed to update rent info');
   return res.json();
 }
+
+export async function updateDomicilioPasajero(data: { direccion: string; latitud: number; longitud: number }) {
+  const res = await fetch(`${API_URL}/transporte/pasajeros/domicilio`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ message: 'Error al actualizar domicilio' }));
+    throw new Error(err.message || 'Failed to update passenger address');
+  }
+  return res.json();
+}
+
+export async function simularSmartRutas(maxDistanciaKm?: number, maxPasajerosPorRuta?: number) {
+  const res = await fetch(`${API_URL}/transporte/routing/simular`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+    body: JSON.stringify({ maxDistanciaKm, maxPasajerosPorRuta }),
+  });
+  if (!res.ok) throw new Error('Failed to run smart routing simulation');
+  return res.json();
+}
+
+export async function aplicarSmartRutas(rutasSugeridas: any[]) {
+  const res = await fetch(`${API_URL}/transporte/routing/aplicar`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+    body: JSON.stringify({ rutasSugeridas }),
+  });
+  if (!res.ok) throw new Error('Failed to apply smart routing plan');
+  return res.json();
+}
+
+export async function fetchReporteKPIs(): Promise<any> {
+  const res = await fetch(`${API_URL}/transporte/reportes/kpis`, { headers: getAuthHeader() });
+  if (!res.ok) throw new Error('Failed to fetch KPI reports');
+  return res.json();
+}
+
+export async function fetchEficienciaRutas(): Promise<any[]> {
+  const res = await fetch(`${API_URL}/transporte/reportes/eficiencia`, { headers: getAuthHeader() });
+  if (!res.ok) throw new Error('Failed to fetch routes efficiency reports');
+  return res.json();
+}
+
+export async function fetchAuditoriaAsistencia(filtros: { rutaId?: number; fechaInicio?: string; fechaFin?: string }): Promise<any[]> {
+  const params = new URLSearchParams();
+  if (filtros.rutaId) params.append('rutaId', filtros.rutaId.toString());
+  if (filtros.fechaInicio) params.append('fechaInicio', filtros.fechaInicio);
+  if (filtros.fechaFin) params.append('fechaFin', filtros.fechaFin);
+
+  const queryStr = params.toString() ? `?${params.toString()}` : '';
+  const res = await fetch(`${API_URL}/transporte/reportes/asistencia${queryStr}`, { headers: getAuthHeader() });
+  if (!res.ok) throw new Error('Failed to fetch attendance audit log');
+  return res.json();
+}
+

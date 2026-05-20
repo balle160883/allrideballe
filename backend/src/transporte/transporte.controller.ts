@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Delete, Param, Body, UseGuards, Request } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Param, Body, UseGuards, Request, Query } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { RentaGuard } from '../renta/renta.guard';
 import { TransporteService } from './transporte.service';
@@ -67,6 +67,21 @@ export class TransporteController {
     return this.transporteService.getPasajeros();
   }
 
+  @Post('pasajeros')
+  async createPasajero(@Body() data: { email: string; nombre: string; identificador_tarjeta: string }) {
+    return this.transporteService.createPasajero(data);
+  }
+
+  @Patch('pasajeros/:id')
+  async updatePasajero(@Param('id') id: string, @Body() data: any) {
+    return this.transporteService.updatePasajero(id, data);
+  }
+
+  @Delete('pasajeros/:id')
+  async deletePasajero(@Param('id') id: string) {
+    return this.transporteService.deletePasajero(id);
+  }
+
   // ==========================================
   // VIAJES
   // ==========================================
@@ -95,6 +110,36 @@ export class TransporteController {
   // ==========================================
   // RESERVAS
   // ==========================================
+  @Get('reservas/pasajero')
+  async getReservasPasajero(@Request() req: any) {
+    return this.transporteService.getReservasPasajero(req.user.userId);
+  }
+
+  @Get('viajes/disponibles')
+  async getViajesDisponibles(@Request() req: any) {
+    return this.transporteService.getViajesDisponibles(req.user.userId);
+  }
+
+  @Post('reservas/solicitar')
+  async solicitarReserva(@Request() req: any, @Body() data: { viaje_id: number }) {
+    return this.transporteService.solicitarReserva(req.user.userId, Number(data.viaje_id));
+  }
+
+  @Get('reservas/pendientes')
+  async getReservasPendientes() {
+    return this.transporteService.getReservasPendientes();
+  }
+
+  @Patch('reservas/:id/aprobar')
+  async aprobarReserva(@Request() req: any, @Param('id') id: string, @Body() data?: { notas?: string }) {
+    return this.transporteService.aprobarReserva(Number(id), req.user.userId, data?.notas);
+  }
+
+  @Patch('reservas/:id/rechazar')
+  async rechazarReserva(@Request() req: any, @Param('id') id: string, @Body() data?: { notas?: string }) {
+    return this.transporteService.rechazarReserva(Number(id), req.user.userId, data?.notas);
+  }
+
   @Get('viajes/:id/reservas')
   async getReservas(@Param('id') id: string) {
     return this.transporteService.getReservas(Number(id));
@@ -110,11 +155,29 @@ export class TransporteController {
     return this.transporteService.updateReservaEstado(Number(id), data.estado);
   }
 
+  @Post('viajes/:id/abordar')
+  async abordarPasajero(
+    @Param('id') id: string,
+    @Body() data: { identificador_tarjeta: string }
+  ) {
+    return this.transporteService.abordarPasajero(Number(id), data.identificador_tarjeta);
+  }
+
   // ==========================================
   // GPS
   // ==========================================
   @Post('locations')
   async saveLocation(@Request() req: any, @Body() data: any) {
+    return this.transporteService.saveLocation({
+      viaje_id: Number(data.viaje_id),
+      latitud: Number(data.latitud),
+      longitud: Number(data.longitud),
+      velocidad: data.velocidad ? Number(data.velocidad) : undefined,
+    });
+  }
+
+  @Post('viajes/location')
+  async saveLocationAlias(@Request() req: any, @Body() data: any) {
     return this.transporteService.saveLocation({
       viaje_id: Number(data.viaje_id),
       latitud: Number(data.latitud),
@@ -144,5 +207,48 @@ export class TransporteController {
   @Patch('alertas/:id/resolver')
   async resolverAlerta(@Param('id') id: string) {
     return this.transporteService.resolverAlerta(Number(id));
+  }
+
+  @Patch('pasajeros/domicilio')
+  async setDomicilioPasajero(@Request() req: any, @Body() data: { direccion: string; latitud: number; longitud: number }) {
+    return this.transporteService.setDomicilioPasajero(req.user.userId, data);
+  }
+
+  @Post('routing/simular')
+  async simularSmartRutas(@Body() data: { maxDistanciaKm?: number; maxPasajerosPorRuta?: number }) {
+    const dist = data.maxDistanciaKm !== undefined ? Number(data.maxDistanciaKm) : 2.5;
+    const cap = data.maxPasajerosPorRuta !== undefined ? Number(data.maxPasajerosPorRuta) : 15;
+    return this.transporteService.generarSmartRutas(dist, cap);
+  }
+
+  @Post('routing/aplicar')
+  async aplicarSmartRutas(@Body() data: { rutasSugeridas: any[] }) {
+    return this.transporteService.aplicarSmartRutas(data.rutasSugeridas);
+  }
+
+  // ==========================================
+  // REPORTES Y AUDITORÍA
+  // ==========================================
+  @Get('reportes/kpis')
+  async getReporteKPIs() {
+    return this.transporteService.getReporteKPIs();
+  }
+
+  @Get('reportes/eficiencia')
+  async getEficienciaRutas() {
+    return this.transporteService.getEficienciaRutas();
+  }
+
+  @Get('reportes/asistencia')
+  async getAuditoriaAsistencia(
+    @Query('rutaId') rutaId?: string,
+    @Query('fechaInicio') fechaInicio?: string,
+    @Query('fechaFin') fechaFin?: string
+  ) {
+    return this.transporteService.getAuditoriaAsistencia({
+      rutaId: rutaId ? Number(rutaId) : undefined,
+      fechaInicio,
+      fechaFin
+    });
   }
 }

@@ -2,80 +2,112 @@ import { useState, useEffect } from 'react';
 import { api } from '../api/backend';
 import { useAuth } from '../context/AuthContext';
 
-export interface Visita {
-  id: string; 
-  numCuenta: string; // ID del viaje
-  nombre: string; // Nombre de la Ruta
-  nombreSocio?: string; // Nombre del Conductor
-  domicilio: string; // Origen
-  colonia: string; // Destino
-  tipo: string; // Estado del viaje
-  socioId: string; // Vehículo patente
-  saldoTotal: number; // Capacidad de pasajeros
-  saldoAlDia: number; // Pasajeros reservados
-  diasMora: number; // Hora de salida (minutos desde hoy/timestamp)
-  telefonos: string; // Vehículo descripción
-  situacion: string; // Estado del viaje
-  latitud?: number;
-  longitud?: number;
-  isRealizada: boolean;
+// Interfaz para una parada de la ruta
+export interface Parada {
+  orden: number;
+  nombre: string;
+  latitud: number;
+  longitud: number;
 }
 
-export function useVisitas() {
-  const [visitas, setVisitas] = useState<Visita[]>([]);
+// Interfaz para la ubicación del autobús
+export interface UbicacionAutobus {
+  latitud: number;
+  longitud: number;
+  velocidad?: number;
+  timestamp: string;
+}
+
+// Interfaz limpia de transporte corporativo (Reserva del pasajero)
+export interface Viaje {
+  id: string;
+  reserva_id: number;
+  viaje_id: number;
+  ruta_nombre: string;
+  conductor_nombre: string;
+  origen: string;
+  destino: string;
+  paradas: Parada[];
+  estado: string;         // 'programado' | 'en_ruta' | 'completado' | 'cancelado'
+  viaje_estado: string;
+  patente: string;        // Matrícula del vehículo
+  modelo: string;         // Descripción del vehículo
+  capacidad: number;      // Asientos totales
+  fecha_hora_salida: number; // timestamp ms
+  ultima_ubicacion?: UbicacionAutobus;
+  asiento_numero: number;
+  reserva_estado: string;
+  isRealizada: boolean;   // true si estado === 'completado'
+}
+
+export function useViajes() {
+  const [viajes, setViajes] = useState<Viaje[]>([]);
   const [loading, setLoading] = useState(true);
   const { user } = useAuth();
 
-  const fetchVisitas = async () => {
+  const fetchViajes = async () => {
     if (!user) return;
-    
     setLoading(true);
     try {
-      // Obtener los viajes del sistema
-      const viajesData = await api.get('/transporte/viajes');
-      
-      const mapped: Visita[] = (viajesData || []).map((viaje: any) => {
-        return {
-          id: viaje.id.toString(),
-          numCuenta: viaje.id.toString(),
-          nombre: viaje.ruta_nombre || 'Ruta sin nombre',
-          nombreSocio: viaje.conductor_nombre || 'Sin conductor asignado',
-          domicilio: viaje.origen || 'Origen no especificado',
-          colonia: viaje.destino || 'Destino no especificado',
-          tipo: viaje.estado === 'en_progreso' ? 'En Progreso' : viaje.estado === 'programado' ? 'Programado' : 'Finalizado',
-          socioId: viaje.patente || 'S/P',
-          saldoTotal: viaje.capacidad || 30,
-          saldoAlDia: 12, // Asientos ocupados estimados o dinámicos
-          diasMora: new Date(viaje.fecha_hora_salida).getTime(),
-          telefonos: `${viaje.modelo || 'Unidad'} [${viaje.patente || 'S/P'}]`,
-          situacion: viaje.estado,
-          latitud: viaje.latitud ? Number(viaje.latitud) : undefined,
-          longitud: viaje.longitud ? Number(viaje.longitud) : undefined,
-          isRealizada: viaje.estado === 'finalizado'
-        };
-      });
-
-      setVisitas(mapped);
+      const data = await api.get('/transporte/reservas/pasajero');
+      const mapped: Viaje[] = (data || []).map((v: any) => ({
+        id: v.reserva_id.toString(),
+        reserva_id: v.reserva_id,
+        viaje_id: v.viaje_id,
+        ruta_nombre: v.ruta_nombre || 'Ruta sin nombre',
+        conductor_nombre: v.conductor_nombre || 'Sin conductor asignado',
+        origen: v.origen || 'Origen no especificado',
+        destino: v.destino || 'Destino no especificado',
+        paradas: v.paradas || [],
+        estado: v.viaje_estado || 'programado',
+        viaje_estado: v.viaje_estado || 'programado',
+        patente: v.patente || 'S/P',
+        modelo: v.modelo || 'Unidad',
+        capacidad: v.capacidad || 30,
+        fecha_hora_salida: new Date(v.fecha_hora_salida).getTime(),
+        ultima_ubicacion: v.ultima_ubicacion ? {
+          latitud: Number(v.ultima_ubicacion.latitud),
+          longitud: Number(v.ultima_ubicacion.longitud),
+          velocidad: v.ultima_ubicacion.velocidad ? Number(v.ultima_ubicacion.velocidad) : undefined,
+          timestamp: v.ultima_ubicacion.timestamp
+        } : undefined,
+        asiento_numero: v.asiento_numero,
+        reserva_estado: v.reserva_estado,
+        isRealizada: v.viaje_estado === 'completado',
+      }));
+      setViajes(mapped);
     } catch (e) {
-      console.error('Error fetching viajes for mobile list:', e);
+      console.error('Error fetching viajes:', e);
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => {
-    fetchVisitas();
-  }, [user]);
+  const calificarViaje = async (viajeId: number, reservaId: number, calificacion: number, comentario?: string) => {
+    try {
+      await api.post(`/transporte/calificaciones`, {
+        viaje_id: viajeId,
+        reserva_id: reservaId,
+        calificacion,
+        comentario
+      });
+      return { success: true };
+    } catch (e) {
+      console.error('Error calificando viaje:', e);
+      throw e;
+    }
+  };
 
-  return { visitas, loading, refresh: fetchVisitas };
+  useEffect(() => { fetchViajes(); }, [user]);
+
+  return { viajes, loading, refresh: fetchViajes, calificarViaje };
 }
 
-export function useGroupedVisitas() {
-  const { visitas, loading, refresh } = useVisitas();
-  
-  // Agrupar por destino (colonia) o estado
-  const sections = visitas.reduce((acc: any[], v: Visita) => {
-    const groupTitle = v.colonia; // Agrupar por destino final
+export function useGroupedViajes() {
+  const { viajes, loading, refresh } = useViajes();
+
+  const sections = viajes.reduce((acc: any[], v: Viaje) => {
+    const groupTitle = v.destino;
     const section = acc.find(s => s.title === groupTitle);
     if (section) {
       section.data.push(v);
@@ -87,3 +119,8 @@ export function useGroupedVisitas() {
 
   return { sections, loading, refresh };
 }
+
+// Alias de compatibilidad para hooks existentes que aún usen Visita
+export type Visita = Viaje;
+export const useVisitas = useViajes;
+export const useGroupedVisitas = useGroupedViajes;

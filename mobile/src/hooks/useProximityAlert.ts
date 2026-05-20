@@ -1,70 +1,123 @@
-import { useEffect, useRef } from 'react';
-import * as Location from 'expo-location';
+import { useEffect, useRef, useState } from 'react';
 import { Alert } from 'react-native';
-import { Visita } from './useVisitas';
+import { Viaje, Parada } from './useVisitas';
 import { useAuth } from '../context/AuthContext';
+import { api } from '../api/backend';
+import { scheduleLocalNotification } from '../utils/PushNotifications';
 
-const PROXIMITY_THRESHOLD = 500; // 500 meters
-const COOLDOWN_TIME = 5 * 60 * 1000; // 5 minutes in milliseconds
+const PROXIMITY_THRESHOLD = 800; // 800 meters
+const COOLDOWN_TIME = 10 * 60 * 1000; // 10 minutes in milliseconds
+const LOCATION_POLL_INTERVAL = 30000; // 30 seconds
 
-export function useProximityAlert(visitas: Visita[], onNavigate: (visita: Visita) => void) {
-  const lastAlertedRef = useRef<{ id: string; time: number } | null>(null);
+export function useProximityAlert(viajes: Viaje[], onNavigate: (viaje: Viaje) => void) {
+  const lastAlertedRef = useRef<{ viajeId: number; paradaId: string; time: number } | null>(null);
   const { proximityAlertsEnabled } = useAuth();
+  const [latestLocations, setLatestLocations] = useState<any[]>([]);
+  const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  useEffect(() => {
+  const fetchLatestLocations = async () => {
+    try {
+      const data = await api.get('/transporte/locations/latest');
+      setLatestLocations(data || []);
+    } catch (e) {
+      console.error('Error fetching latest locations:', e);
+    }
+  };
+
+  const getParadaDestino = (viaje: Viaje): Parada | null => {
+    if (!viaje.paradas || viaje.paradas.length === 0) return null;
+    // Por defecto, la parada destino es la última parada de la ruta
+    // En un futuro, se podría almacenar la parada asignada en la reserva
+    return viaje.paradas[viaje.paradas.length - 1];
+  };
+
+  const checkProximity = () => {
     if (!proximityAlertsEnabled) return;
 
-    let subscription: Location.LocationSubscription | null = null;
-
-    const checkProximity = (lat: number, lon: number) => {
-      const now = Date.now();
+    const now = Date.now();
+    
+    for (const viaje of viajes) {
+      // Solo monitoreamos viajes que estén en ruta
+      if (viaje.viaje_estado !== 'en_ruta') continue;
       
-      for (const visita of visitas) {
-        if (visita.latitud && visita.longitud) {
-          const distance = calculateDistance(lat, lon, visita.latitud, visita.longitud);
+      const paradaDestino = getParadaDestino(viaje);
+      if (!paradaDestino) continue;
+
+      // Encontrar la última ubicación del autobús para este viaje
+      const busLocation = latestLocations.find(loc => loc.viaje_id === viaje.viaje_id);
+      if (!busLocation) continue;
+
+      const distance = calculateDistance(
+        Number(busLocation.latitud),
+        Number(busLocation.longitud),
+        paradaDestino.latitud,
+        paradaDestino.longitud
+      );
+      
+      if (distance < PROXIMITY_THRESHOLD) {
+        const paradaId = `${viaje.viaje_id}-${paradaDestino.orden}`;
+        const lastAlert = lastAlertedRef.current;
+        
+        // Si es un viaje distinto, parada distinta, o ha pasado suficiente tiempo
+        if (!lastAlert || 
+            lastAlert.viajeId !== viaje.viaje_id || 
+            lastAlert.paradaId !== paradaId || 
+            (now - lastAlert.time > COOLDOWN_TIME)) {
           
-          if (distance < PROXIMITY_THRESHOLD) {
-            const lastAlert = lastAlertedRef.current;
-            
-            // Si es una visita distinta O ha pasado suficiente tiempo desde la última alerta para la misma visita
-            if (!lastAlert || lastAlert.id !== visita.id || (now - lastAlert.time > COOLDOWN_TIME)) {
-              Alert.alert(
-                '📍 Destino Cercano',
-                `Te encuentras cerca de la parada: ${visita.colonia}. ¿Deseas ver los detalles del viaje?`,
-                [{ text: 'Ignorar' }, { text: 'Ver Detalle', onPress: () => onNavigate(visita) }]
-              );
-              
-              lastAlertedRef.current = { id: visita.id, time: now };
-              break; 
-            }
-          }
+          const distanciaKm = (distance / 1000).toFixed(1);
+          const title = '🚌 Autobús Cercano';
+          const body = `El autobús de la ruta "${viaje.ruta_nombre}" está a ${distanciaKm} km de tu parada "${paradaDestino.nombre}". ¡Prepárate para abordar!`;
+          
+          // Enviar notificación push local
+          scheduleLocalNotification(title, body, 1);
+          
+          // También mostrar alerta in-app por si la app está abierta
+          Alert.alert(
+            title,
+            body,
+            [
+              { text: 'Cerrar' },
+              { text: 'Ver Detalle', onPress: () => onNavigate(viaje) }
+            ]
+          );
+          
+          lastAlertedRef.current = { viajeId: viaje.viaje_id, paradaId, time: now };
+          break; 
         }
       }
-    };
+    }
+  };
 
-    const startWatching = async () => {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') return;
+  useEffect(() => {
+    if (!proximityAlertsEnabled) {
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
+        pollIntervalRef.current = null;
+      }
+      return;
+    }
 
-      subscription = await Location.watchPositionAsync(
-        {
-          accuracy: Location.Accuracy.Balanced,
-          distanceInterval: 50,
-        },
-        (location) => {
-          checkProximity(location.coords.latitude, location.coords.longitude);
-        }
-      );
-    };
-
-    startWatching();
+    // Fetch inicial
+    fetchLatestLocations();
+    
+    // Iniciar polling
+    pollIntervalRef.current = setInterval(() => {
+      fetchLatestLocations();
+    }, LOCATION_POLL_INTERVAL);
 
     return () => {
-      if (subscription) {
-        subscription.remove();
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
       }
     };
-  }, [visitas, proximityAlertsEnabled]);
+  }, [proximityAlertsEnabled]);
+
+  useEffect(() => {
+    // Verificar proximidad cada vez que se actualizan las ubicaciones o los viajes
+    if (latestLocations.length > 0) {
+      checkProximity();
+    }
+  }, [latestLocations, viajes]);
 }
 
 function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number) {

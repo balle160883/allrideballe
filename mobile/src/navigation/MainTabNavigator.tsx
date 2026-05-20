@@ -9,13 +9,17 @@ import VisitasNavigator from './VisitasNavigator';
 // Screens
 import MapaScreen from '../screens/MapaScreen';
 import PerfilScreen from '../screens/PerfilScreen';
+import RutasDisponiblesScreen from '../screens/RutasDisponiblesScreen';
 
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useAuth } from '../context/AuthContext';
 
 const Tab = createBottomTabNavigator();
 
 export default function MainTabNavigator() {
   const insets = useSafeAreaInsets();
+  const { user } = useAuth();
+  const isConductor = user?.rol === 'conductor';
 
   return (
     <Tab.Navigator
@@ -56,6 +60,22 @@ export default function MainTabNavigator() {
           headerShown: false,
         }}
       />
+      
+      {/* Pestaña de rutas solo para pasajeros */}
+      {!isConductor && (
+        <Tab.Screen 
+          name="Rutas" 
+          component={RutasDisponiblesScreen} 
+          options={{
+            tabBarIcon: ({ color }) => (
+              <MaterialCommunityIcons name="routes" color={color} size={28} />
+            ),
+            title: 'Rutas',
+            headerShown: false,
+          }}
+        />
+      )}
+      
       <Tab.Screen 
         name="Mapa" 
         component={MapaScreen} 

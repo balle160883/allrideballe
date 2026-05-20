@@ -55,6 +55,28 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
         ON CONFLICT (email) DO UPDATE SET password_hash = 'Seguridad2026@', rol = 'admin_cliente';
       `);
       this.logger.log('Usuario administrador global asegurado en la tabla de usuarios.');
+
+      // Ejecutar alteraciones de esquema para el flujo de aprobación gerencial y smart routing
+      await this.pool.query(`
+        -- Alterar constraint de rol en usuarios para soportar 'gerente'
+        ALTER TABLE "usuarios" DROP CONSTRAINT IF EXISTS "usuarios_rol_check";
+        ALTER TABLE "usuarios" ADD CONSTRAINT "usuarios_rol_check" CHECK ("rol" IN ('admin_cliente', 'admin_proveedor', 'conductor', 'pasajero', 'gerente'));
+
+        -- Alterar constraint de estado en reservas para nuevos estados de aprobación
+        ALTER TABLE "reservas" DROP CONSTRAINT IF EXISTS "reservas_estado_check";
+        ALTER TABLE "reservas" ADD CONSTRAINT "reservas_estado_check" CHECK ("estado" IN ('pendiente_aprobacion', 'reservado', 'confirmado', 'no_abordado', 'cancelado', 'rechazado'));
+
+        -- Agregar columnas de auditoría y notas de aprobación
+        ALTER TABLE "reservas" ADD COLUMN IF NOT EXISTS "aprobado_por" UUID REFERENCES "usuarios"("id") ON DELETE SET NULL;
+        ALTER TABLE "reservas" ADD COLUMN IF NOT EXISTS "fecha_aprobacion" TIMESTAMP;
+        ALTER TABLE "reservas" ADD COLUMN IF NOT EXISTS "notas_gerente" TEXT;
+
+        -- Agregar campos de dirección y geocoordenadas a usuarios
+        ALTER TABLE "usuarios" ADD COLUMN IF NOT EXISTS "direccion" VARCHAR(500);
+        ALTER TABLE "usuarios" ADD COLUMN IF NOT EXISTS "latitud" NUMERIC(10, 8);
+        ALTER TABLE "usuarios" ADD COLUMN IF NOT EXISTS "longitud" NUMERIC(11, 8);
+      `);
+      this.logger.log('Esquema de base de datos actualizado para el flujo de aprobación gerencial y smart routing.');
     } catch (error) {
       this.initError = error.message;
       this.logger.error('Error al conectar con PostgreSQL:', error.message);

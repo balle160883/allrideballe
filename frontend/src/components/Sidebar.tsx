@@ -10,7 +10,9 @@ import {
   Route,
   Bus,
   Calendar,
-  Users
+  Users,
+  CheckSquare,
+  BarChart3
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
@@ -19,6 +21,8 @@ export function Sidebar({ isOpen, onClose }: { isOpen?: boolean, onClose?: () =>
   const [isMounted, setIsMounted] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
+  const [isGerente, setIsGerente] = useState(false);
+  const [pendingCount, setPendingCount] = useState(0);
 
   useEffect(() => {
     setIsMounted(true);
@@ -27,32 +31,80 @@ export function Sidebar({ isOpen, onClose }: { isOpen?: boolean, onClose?: () =>
       try {
         const user = JSON.parse(userInfo);
         const userEmail = user.email?.trim().toLowerCase();
+        const role = user.rol?.toLowerCase();
         
         const superRole = 
-         user.rol?.toLowerCase() === 'superadmin' || 
+         role === 'superadmin' || 
          user.gestor?.toUpperCase() === 'SUPERADMIN';
 
+        const isGerenteUser = role === 'gerente';
+
         const isAdminUser = 
-          user.rol?.toLowerCase() === 'admin' || 
-          user.rol?.toLowerCase() === 'admin_cliente' || 
-          user.rol?.toLowerCase() === 'admin_proveedor' || 
+          role === 'admin' || 
+          role === 'admin_cliente' || 
+          role === 'admin_proveedor' || 
           superRole ||
           userEmail === 'ing.ballesteros16@gmail.com';
         
         setIsAdmin(isAdminUser);
         setIsSuperAdmin(superRole);
+        setIsGerente(isGerenteUser);
       } catch (e) {
         console.error("Error parsing user info", e);
       }
     }
   }, [pathname]);
 
+  // Obtener conteo de aprobaciones pendientes
+  useEffect(() => {
+    const userInfo = localStorage.getItem('user_info');
+    if (!userInfo) return;
+    try {
+      const user = JSON.parse(userInfo);
+      const role = user.rol?.toLowerCase();
+      const userEmail = user.email?.trim().toLowerCase();
+      const isAllowed = 
+        role === 'admin' || 
+        role === 'admin_cliente' || 
+        role === 'admin_proveedor' || 
+        role === 'gerente' ||
+        userEmail === 'ing.ballesteros16@gmail.com';
+        
+      if (isAllowed) {
+        const fetchPending = async () => {
+          try {
+            const token = localStorage.getItem('auth_token');
+            const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+            const res = await fetch(`${apiUrl}/transporte/reservas/pendientes`, {
+              headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (res.ok) {
+              const data = await res.json();
+              setPendingCount(data.length);
+            }
+          } catch (e) {
+            console.error("Error fetching pending approvals", e);
+          }
+        };
+        fetchPending();
+        const interval = setInterval(fetchPending, 15000); // refresh every 15s
+        return () => clearInterval(interval);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  }, []);
+
   const menuItems = [
     { icon: LayoutDashboard, label: 'Dashboard', href: '/' },
     { icon: Map, label: 'Mapa en Vivo', href: '/admin/mapa' },
     { icon: Route, label: 'Rutas', href: '/admin/rutas', adminOnly: true },
+    { icon: Route, label: 'Smart Routing 🚀', href: '/admin/rutas/smart', adminOnly: true },
     { icon: Bus, label: 'Vehículos & Flota', href: '/admin/vehiculos', adminOnly: true },
-    { icon: Calendar, label: 'Viajes & Reservas', href: '/admin/viajes' },
+    { icon: Users, label: 'Pasajeros & Empleados', href: '/admin/pasajeros', adminOnly: true },
+    { icon: Calendar, label: 'Viajes & Reservas', href: '/admin/viajes', allowedRoles: ['admin', 'gerente'] },
+    { icon: CheckSquare, label: 'Aprobaciones', href: '/admin/aprobaciones', allowedRoles: ['admin', 'gerente'], badge: pendingCount },
+    { icon: BarChart3, label: 'Reportes & KPIs', href: '/admin/reportes', allowedRoles: ['admin', 'gerente'] },
     { icon: CreditCard, label: 'Renta Mensual', href: '/admin/renta', superOnly: true },
   ];
 
@@ -98,23 +150,31 @@ export function Sidebar({ isOpen, onClose }: { isOpen?: boolean, onClose?: () =>
             {menuItems.map((item, index) => {
               if (item.adminOnly && !isAdmin) return null;
               if (item.superOnly && !isSuperAdmin) return null;
+              if (item.allowedRoles && !isAdmin && (!isGerente || !item.allowedRoles.includes('gerente'))) return null;
+              
+              const hasBadge = item.badge !== undefined && item.badge > 0;
               
               return (
                 <div key={item.href}>
                   <Link 
                     href={item.href}
                     onClick={onClose}
-                    className={`flex items-center px-6 py-3 transition-colors gap-3 ${
+                    className={`flex items-center justify-between px-6 py-3 transition-colors gap-3 ${
                       pathname === item.href 
                         ? 'bg-blue-600/10 text-blue-400 border-r-4 border-blue-600' 
                         : 'text-slate-300 hover:bg-slate-800 hover:text-white'
                     }`}
                   >
-                    <item.icon size={20} />
-                    <span className="font-medium">{item.label}</span>
+                    <div className="flex items-center gap-3">
+                      <item.icon size={20} />
+                      <span className="font-medium">{item.label}</span>
+                    </div>
+                    {hasBadge && (
+                      <span className="bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-full min-w-[20px] text-center">
+                        {item.badge}
+                      </span>
+                    )}
                   </Link>
-                  
-
                 </div>
               );
             })}
