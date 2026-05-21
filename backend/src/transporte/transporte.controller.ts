@@ -100,6 +100,11 @@ export class TransporteController {
     return this.transporteService.deleteAdminProveedor(id);
   }
 
+  @Post('importar-excel')
+  async importarDatosExcel(@Body() data: any) {
+    return this.transporteService.importarDatosExcel(data);
+  }
+
   @Get('pasajeros')
   async getPasajeros() {
     return this.transporteService.getPasajeros();

@@ -14,7 +14,8 @@ import {
   CheckSquare,
   BarChart3,
   Briefcase,
-  Building2
+  Building2,
+  FileSpreadsheet
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
@@ -24,8 +25,6 @@ export function Sidebar({ isOpen, onClose }: { isOpen?: boolean, onClose?: () =>
   const [isAdmin, setIsAdmin] = useState(false);
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   const [isGerente, setIsGerente] = useState(false);
-  const [isAdminCliente, setIsAdminCliente] = useState(false);
-  const [isAdminProveedor, setIsAdminProveedor] = useState(false);
   const [pendingCount, setPendingCount] = useState(0);
 
   useEffect(() => {
@@ -42,8 +41,6 @@ export function Sidebar({ isOpen, onClose }: { isOpen?: boolean, onClose?: () =>
          user.gestor?.toUpperCase() === 'SUPERADMIN';
 
         const isGerenteUser = role === 'gerente';
-        const isAdminClienteUser = role === 'admin_cliente';
-        const isAdminProveedorUser = role === 'admin_proveedor';
 
         const isAdminUser = 
           role === 'admin' || 
@@ -55,8 +52,6 @@ export function Sidebar({ isOpen, onClose }: { isOpen?: boolean, onClose?: () =>
         setIsAdmin(isAdminUser);
         setIsSuperAdmin(superRole);
         setIsGerente(isGerenteUser);
-        setIsAdminCliente(isAdminClienteUser || superRole || userEmail === 'ing.ballesteros16@gmail.com');
-        setIsAdminProveedor(isAdminProveedorUser);
       } catch (e) {
         console.error("Error parsing user info", e);
       }
@@ -105,16 +100,17 @@ export function Sidebar({ isOpen, onClose }: { isOpen?: boolean, onClose?: () =>
 
   const menuItems = [
     { icon: LayoutDashboard, label: 'Dashboard', href: '/' },
+    { icon: FileSpreadsheet, label: 'Importar Excel', href: '/admin/importar', adminOnly: true },
     { icon: Map, label: 'Mapa en Vivo', href: '/admin/mapa' },
-    { icon: Route, label: 'Rutas', href: '/admin/rutas', adminClienteOnly: true },
-    { icon: Route, label: 'Smart Routing 🚀', href: '/admin/rutas/smart', adminClienteOnly: true },
-    { icon: Bus, label: 'Vehículos & Flota', href: '/admin/vehiculos' },
-    { icon: Briefcase, label: 'Conductores', href: '/admin/conductores' },
-    { icon: Building2, label: 'Proveedores', href: '/admin/proveedores', adminClienteOnly: true },
-    { icon: Users, label: 'Pasajeros & Empleados', href: '/admin/pasajeros', adminClienteOnly: true },
-    { icon: Calendar, label: 'Viajes & Reservas', href: '/admin/viajes', allowedRoles: ['admin', 'gerente', 'admin_cliente', 'admin_proveedor'] },
-    { icon: CheckSquare, label: 'Aprobaciones', href: '/admin/aprobaciones', allowedRoles: ['admin', 'gerente', 'admin_cliente'], badge: pendingCount },
-    { icon: BarChart3, label: 'Reportes & KPIs', href: '/admin/reportes', allowedRoles: ['admin', 'gerente', 'admin_cliente', 'admin_proveedor'] },
+    { icon: Route, label: 'Rutas', href: '/admin/rutas', adminOnly: true },
+    { icon: Route, label: 'Smart Routing 🚀', href: '/admin/rutas/smart', adminOnly: true },
+    { icon: Bus, label: 'Vehículos & Flota', href: '/admin/vehiculos', adminOnly: true },
+    { icon: Briefcase, label: 'Conductores', href: '/admin/conductores', adminOnly: true },
+    { icon: Building2, label: 'Proveedores', href: '/admin/proveedores', adminOnly: true },
+    { icon: Users, label: 'Pasajeros & Empleados', href: '/admin/pasajeros', adminOnly: true },
+    { icon: Calendar, label: 'Viajes & Reservas', href: '/admin/viajes', allowedRoles: ['admin', 'gerente'] },
+    { icon: CheckSquare, label: 'Aprobaciones', href: '/admin/aprobaciones', allowedRoles: ['admin', 'gerente'], badge: pendingCount },
+    { icon: BarChart3, label: 'Reportes & KPIs', href: '/admin/reportes', allowedRoles: ['admin', 'gerente'] },
     { icon: CreditCard, label: 'Renta Mensual', href: '/admin/renta', superOnly: true },
   ];
 
@@ -159,16 +155,8 @@ export function Sidebar({ isOpen, onClose }: { isOpen?: boolean, onClose?: () =>
           <nav className="flex-1 mt-6 overflow-y-auto">
             {menuItems.map((item, index) => {
               if (item.adminOnly && !isAdmin) return null;
-              if (item.adminClienteOnly && !isAdminCliente) return null;
               if (item.superOnly && !isSuperAdmin) return null;
-              if (item.allowedRoles) {
-                const hasRole = 
-                  (item.allowedRoles.includes('admin') && isAdminCliente) ||
-                  (item.allowedRoles.includes('gerente') && isGerente) ||
-                  (item.allowedRoles.includes('admin_cliente') && isAdminCliente) ||
-                  (item.allowedRoles.includes('admin_proveedor') && isAdminProveedor);
-                if (!hasRole) return null;
-              }
+              if (item.allowedRoles && !isAdmin && (!isGerente || !item.allowedRoles.includes('gerente'))) return null;
               
               const hasBadge = item.badge !== undefined && item.badge > 0;
               

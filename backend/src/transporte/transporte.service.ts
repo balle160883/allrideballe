@@ -1021,5 +1021,171 @@ export class TransporteService {
     const res = await this.databaseService.query(sql, params);
     return res.rows;
   }
+
+  async importarDatosExcel(datos: any) {
+    const client = await this.databaseService.getClient();
+    try {
+      await client.query('BEGIN');
+
+      const resultados: any = {
+        rutas_creadas: 0,
+        empleados_creados: 0,
+        viajes_creados: 0,
+        rutas: [],
+        empleados: [],
+        viajes: [],
+        errores: [],
+      };
+
+      // 1. Importar Rutas
+      if (datos.rutas && datos.rutas.length > 0) {
+        for (const rutaData of datos.rutas) {
+          try {
+            const nombreRuta = rutaData.nombre_ruta || rutaData.nombre;
+            const origen = rutaData.origen;
+            const destino = rutaData.destino;
+            const activa = (rutaData.activa || 'si').toString().toLowerCase() === 'si';
+
+            if (!nombreRuta || !origen || !destino) {
+              resultados.errores.push(`Ruta incompleta: ${nombreRuta || 'Sin nombre'}`);
+              continue;
+            }
+
+            // Extraer paradas
+            const paradas: any[] = [];
+            for (let i = 1; i <= 20; i++) {
+              const nombreParada = rutaData[`parada_${i}_nombre`];
+              const lat = rutaData[`parada_${i}_latitud`];
+              const lng = rutaData[`parada_${i}_longitud`];
+              
+              if (nombreParada) {
+                paradas.push({
+                  nombre: nombreParada,
+                  latitud: Number(lat) || 0,
+                  longitud: Number(lng) || 0,
+                });
+              }
+            }
+
+            // Crear la ruta
+            const rutaResult = await client.query(
+              'INSERT INTO "rutas" ("nombre", "origen", "destino", "paradas", "activa") VALUES ($1, $2, $3, $4, $5) RETURNING "id"',
+              [nombreRuta, origen, destino, JSON.stringify(paradas), activa]
+            );
+            resultados.rutas_creadas++;
+            resultados.rutas.push({ id: rutaResult.rows[0].id, nombre: nombreRuta });
+          } catch (err) {
+            resultados.errores.push(`Error al crear ruta: ${(err as Error).message}`);
+          }
+        }
+      }
+
+      // 2. Importar Empleados/Pasajeros
+      if (datos.empleados && datos.empleados.length > 0) {
+        for (const empData of datos.empleados) {
+          try {
+            const email = empData.email;
+            const nombre = empData.nombre_completo || empData.nombre;
+            const identificadorTarjeta = empData.identificador_tarjeta || empData.identificador;
+
+            if (!email || !nombre) {
+              resultados.errores.push(`Empleado incompleto: ${nombre || email || 'Sin datos'}`);
+              continue;
+            }
+
+            // Verificar si el email ya existe
+            const emailCheck = await client.query(
+              'SELECT id FROM "usuarios" WHERE "email" = $1',
+              [email.toLowerCase()]
+            );
+
+            if (emailCheck.rows.length > 0) {
+              // Si existe, lo saltamos
+              continue;
+            }
+
+            const passwordHash = await bcrypt.hash('Pasajero2026@', 10);
+
+            await client.query(
+              'INSERT INTO "usuarios" ("email", "password_hash", "nombre", "rol", "identificador_tarjeta") VALUES ($1, $2, $3, \'pasajero\', $4)',
+              [email.toLowerCase(), passwordHash, nombre, identificadorTarjeta || null]
+            );
+            resultados.empleados_creados++;
+            resultados.empleados.push({ email, nombre });
+          } catch (err) {
+            resultados.errores.push(`Error al crear empleado: ${(err as Error).message}`);
+          }
+        }
+      }
+
+      // 3. Importar Viajes
+      if (datos.viajes && datos.viajes.length > 0) {
+        for (const viajeData of datos.viajes) {
+          try {
+            const nombreRuta = viajeData.nombre_ruta;
+            const matriculaVehiculo = viajeData.matricula_vehiculo;
+            const emailConductor = viajeData.email_conductor;
+            const fechaHoraSalida = viajeData.fecha_hora_salida;
+
+            if (!nombreRuta || !matriculaVehiculo || !emailConductor || !fechaHoraSalida) {
+              resultados.errores.push(`Viaje incompleto: ${nombreRuta || 'Sin ruta'}`);
+              continue;
+            }
+
+            // Buscar la ruta por nombre
+            const rutaResult = await client.query(
+              'SELECT "id" FROM "rutas" WHERE "nombre" = $1',
+              [nombreRuta]
+            );
+            if (rutaResult.rows.length === 0) {
+              resultados.errores.push(`Ruta no encontrada: ${nombreRuta}`);
+              continue;
+            }
+            const rutaId = rutaResult.rows[0].id;
+
+            // Buscar el vehículo por matrícula
+            const vehiculoResult = await client.query(
+              'SELECT "id" FROM "vehiculos" WHERE "patente" = $1',
+              [matriculaVehiculo]
+            );
+            if (vehiculoResult.rows.length === 0) {
+              resultados.errores.push(`Vehículo no encontrado: ${matriculaVehiculo}`);
+              continue;
+            }
+            const vehiculoId = vehiculoResult.rows[0].id;
+
+            // Buscar el conductor por email
+            const conductorResult = await client.query(
+              'SELECT "id" FROM "usuarios" WHERE "email" = $1 AND "rol" = \'conductor\'',
+              [emailConductor.toLowerCase()]
+            );
+            if (conductorResult.rows.length === 0) {
+              resultados.errores.push(`Conductor no encontrado: ${emailConductor}`);
+              continue;
+            }
+            const conductorId = conductorResult.rows[0].id;
+
+            // Crear el viaje
+            await client.query(
+              'INSERT INTO "viajes" ("ruta_id", "vehiculo_id", "conductor_id", "fecha_hora_salida", "estado") VALUES ($1, $2, $3, $4, \'programado\')',
+              [rutaId, vehiculoId, conductorId, fechaHoraSalida]
+            );
+            resultados.viajes_creados++;
+            resultados.viajes.push({ ruta: nombreRuta, fecha: fechaHoraSalida });
+          } catch (err) {
+            resultados.errores.push(`Error al crear viaje: ${(err as Error).message}`);
+          }
+        }
+      }
+
+      await client.query('COMMIT');
+      return resultados;
+    } catch (e) {
+      await client.query('ROLLBACK');
+      throw e;
+    } finally {
+      client.release();
+    }
+  }
 }
 
