@@ -26,7 +26,6 @@ export default function VehiculosPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [currentId, setCurrentId] = useState<number | null>(null);
-  const [userInfo, setUserInfo] = useState<any>(null);
 
   // Form states
   const [patente, setPatente] = useState("");
@@ -38,11 +37,10 @@ export default function VehiculosPage() {
   const router = useRouter();
 
   useEffect(() => {
-    const localUserInfo = localStorage.getItem('user_info');
-    if (localUserInfo) {
+    const userInfo = localStorage.getItem('user_info');
+    if (userInfo) {
       try {
-        const user = JSON.parse(localUserInfo);
-        setUserInfo(user);
+        const user = JSON.parse(userInfo);
         const isAdmin = 
           user.rol === 'admin' || 
           user.rol === 'admin_cliente' || 
@@ -64,23 +62,7 @@ export default function VehiculosPage() {
     setLoading(true);
     try {
       const data = await fetchVehiculos();
-      const localUserInfo = localStorage.getItem('user_info');
-      if (localUserInfo) {
-        const user = JSON.parse(localUserInfo);
-        if (user.rol === 'admin_proveedor') {
-          const proveedorName = user.nombre || user.gestor_code;
-          const filtered = data.filter((v: any) => 
-            v.proveedor_nombre && 
-            (v.proveedor_nombre.toLowerCase().includes(proveedorName?.toLowerCase()) || 
-             proveedorName?.toLowerCase().includes(v.proveedor_nombre?.toLowerCase()))
-          );
-          setVehiculos(filtered);
-        } else {
-          setVehiculos(data);
-        }
-      } else {
-        setVehiculos(data);
-      }
+      setVehiculos(data);
     } catch (error) {
       console.error("Error loading vehicles:", error);
     } finally {
@@ -93,11 +75,7 @@ export default function VehiculosPage() {
     setPatente("");
     setModelo("");
     setCapacidad(30);
-    if (userInfo && userInfo.rol === 'admin_proveedor') {
-      setProveedorNombre(userInfo.nombre || userInfo.gestor_code || "");
-    } else {
-      setProveedorNombre("");
-    }
+    setProveedorNombre("");
     setErrorMsg("");
     setIsModalOpen(true);
   };

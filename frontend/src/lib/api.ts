@@ -1,4 +1,4 @@
-let API_URL = process.env.NEXT_PUBLIC_API_URL;
+export let API_URL = process.env.NEXT_PUBLIC_API_URL;
 
 if (!API_URL && typeof window !== 'undefined') {
   const { protocol, hostname } = window.location;
@@ -13,7 +13,7 @@ if (!API_URL) {
   API_URL = 'https://api.allride.com';
 }
 
-function getAuthHeader(): Record<string, string> {
+export function getAuthHeader(): Record<string, string> {
   if (typeof window !== 'undefined') {
     const token = localStorage.getItem('auth_token');
     return token ? { 'Authorization': `Bearer ${token}` } : {};
