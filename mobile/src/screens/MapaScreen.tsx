@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { StyleSheet, View, Text, TouchableOpacity, Alert, Linking, ActivityIndicator, ScrollView, Modal } from 'react-native';
 import { Colors, Spacing } from '../constants/theme';
 import Mapbox from '@rnmapbox/maps';
@@ -47,10 +47,89 @@ function getManeuverIcon(type?: string, modifier?: string): string {
   }
 }
 
+// Proyecta el punto P en el segmento AB
+function projectPointOnSegment(p: number[], a: number[], b: number[]) {
+  const [px, py] = p;
+  const [ax, ay] = a;
+  const [bx, by] = b;
+
+  const dx = bx - ax;
+  const dy = by - ay;
+
+  if (dx === 0 && dy === 0) return a;
+
+  let t = ((px - ax) * dx + (py - ay) * dy) / (dx * dx + dy * dy);
+  t = Math.max(0, Math.min(1, t));
+
+  return [ax + t * dx, ay + t * dy];
+}
+
+// Calcula el rumbo (bearing) en grados entre dos puntos [lng, lat]
+function getBearing(coords1: number[], coords2: number[]) {
+  const [lon1, lat1] = coords1.map(x => x * Math.PI / 180);
+  const [lon2, lat2] = coords2.map(x => x * Math.PI / 180);
+
+  const dLon = lon2 - lon1;
+  const y = Math.sin(dLon) * Math.cos(lat2);
+  const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
+  const brng = Math.atan2(y, x) * 180 / Math.PI;
+  return (brng + 360) % 360;
+}
+
+// Encuentra la coordenada en la ruta más cercana al usuario y calcula el rumbo de ese segmento
+function getSnappedInfo(userLoc: number[], routeCoords: number[][]) {
+  if (!routeCoords || routeCoords.length < 2) {
+    return { snappedPoint: userLoc, bearing: 0 };
+  }
+
+  let minDistance = Infinity;
+  let snappedPoint = userLoc;
+  let closestIndex = 0;
+
+  for (let i = 0; i < routeCoords.length - 1; i++) {
+    const a = routeCoords[i];
+    const b = routeCoords[i + 1];
+    const projected = projectPointOnSegment(userLoc, a, b);
+    const dist = getDistance(userLoc, projected);
+
+    if (dist < minDistance) {
+      minDistance = dist;
+      snappedPoint = projected;
+      closestIndex = i;
+    }
+  }
+
+  // Si el usuario está a más de 50 metros de la ruta, no ajustamos la ubicación
+  if (minDistance > 50) {
+    return { snappedPoint: userLoc, bearing: 0 };
+  }
+
+  const bearing = getBearing(routeCoords[closestIndex], routeCoords[closestIndex + 1]);
+
+  return { snappedPoint, bearing };
+}
+
+// Retorna el nombre del icono para indicaciones de carril
+function getLaneIcon(indications: string[]): string {
+  if (!indications || indications.length === 0) return 'arrow-up';
+  const primary = indications[0];
+  switch (primary) {
+    case 'straight': return 'arrow-up';
+    case 'left': return 'arrow-left';
+    case 'right': return 'arrow-right';
+    case 'slight left': return 'arrow-top-left';
+    case 'slight right': return 'arrow-top-right';
+    case 'sharp left': return 'arrow-left-bold';
+    case 'sharp right': return 'arrow-right-bold';
+    case 'uturn': return 'swap-vertical';
+    default: return 'arrow-up';
+  }
+}
+
 export default function MapaScreen({ route: routeProp, navigation }: any) {
   const { viajes } = useViajes();
   const { user } = useAuth();
-  const { route, steps, duration, distance, fetchRoute, clearRoute, loading: routeLoading } = useDirections();
+  const { route, steps, congestion, duration, distance, fetchRoute, clearRoute, loading: routeLoading } = useDirections();
   const [userLocation, setUserLocation] = useState<number[] | null>(null);
   const [selectedViaje, setSelectedViaje] = useState<Viaje | null>(null);
   const [selectedParada, setSelectedParada] = useState<Parada | null>(null);
@@ -58,7 +137,41 @@ export default function MapaScreen({ route: routeProp, navigation }: any) {
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [distanceToNextStep, setDistanceToNextStep] = useState(0);
   const [isMuted, setIsMuted] = useState(false);
+  const [snappedLocation, setSnappedLocation] = useState<number[] | null>(null);
+  const [snappedHeading, setSnappedHeading] = useState<number>(0);
   const cameraRef = useRef<Mapbox.Camera>(null);
+
+  const routeGeoJSON = useMemo(() => {
+    if (!route || !route.coordinates || route.coordinates.length < 2) {
+      return null;
+    }
+
+    const features: any[] = [];
+    const coords = route.coordinates;
+    const hasCongestion = congestion && congestion.length > 0;
+
+    for (let i = 0; i < coords.length - 1; i++) {
+      const segCongestion = hasCongestion ? congestion[Math.min(i, congestion.length - 1)] : 'unknown';
+      features.push({
+        type: 'Feature',
+        properties: {
+          congestion: segCongestion,
+        },
+        geometry: {
+          type: 'LineString',
+          coordinates: [coords[i], coords[i + 1]],
+        },
+      });
+    }
+
+    return {
+      type: 'FeatureCollection',
+      features,
+    };
+  }, [route, congestion]);
+
+  const currentStep = steps && steps[currentStepIndex];
+  const lanes = currentStep?.intersections?.find((inter: any) => inter.lanes)?.lanes;
 
   const calculateRemainingStats = () => {
     if (!steps || steps.length === 0 || currentStepIndex >= steps.length) {
@@ -192,7 +305,16 @@ export default function MapaScreen({ route: routeProp, navigation }: any) {
           distanceInterval: navigationMode ? 2 : 10,
         },
         (loc) => {
-          setUserLocation([loc.coords.longitude, loc.coords.latitude]);
+          const coords = [loc.coords.longitude, loc.coords.latitude];
+          setUserLocation(coords);
+          if (navigationMode && route && route.coordinates && route.coordinates.length >= 2) {
+            const { snappedPoint, bearing } = getSnappedInfo(coords, route.coordinates);
+            setSnappedLocation(snappedPoint);
+            setSnappedHeading(bearing);
+          } else {
+            setSnappedLocation(null);
+            setSnappedHeading(0);
+          }
         }
       );
     };
@@ -204,7 +326,20 @@ export default function MapaScreen({ route: routeProp, navigation }: any) {
         subscription.remove();
       }
     };
-  }, [navigationMode]);
+  }, [navigationMode, route]);
+
+  // Animación manual y suavizada de la cámara en 3D
+  useEffect(() => {
+    if (navigationMode && snappedLocation && cameraRef.current) {
+      cameraRef.current.setCamera({
+        centerCoordinate: snappedLocation,
+        heading: snappedHeading,
+        pitch: 55,
+        zoomLevel: 16,
+        animationDuration: 1000,
+      });
+    }
+  }, [navigationMode, snappedLocation, snappedHeading]);
 
   useEffect(() => {
     if (viajeActivo && !selectedViaje) {
@@ -283,7 +418,8 @@ export default function MapaScreen({ route: routeProp, navigation }: any) {
     const step = steps[currentStepIndex];
     if (!step || !step.maneuver || !step.maneuver.location) return;
 
-    const distToManeuver = getDistance(userLocation, step.maneuver.location);
+    const activeLoc = snappedLocation || userLocation;
+    const distToManeuver = getDistance(activeLoc, step.maneuver.location);
     setDistanceToNextStep(distToManeuver);
 
     if (distToManeuver < 20) {
@@ -325,7 +461,7 @@ export default function MapaScreen({ route: routeProp, navigation }: any) {
         setCurrentStepIndex(0);
       }
     }
-  }, [userLocation, navigationMode, currentStepIndex, steps, isMuted, route, selectedParada]);
+  }, [userLocation, snappedLocation, navigationMode, currentStepIndex, steps, isMuted, route, selectedParada]);
 
   const handleSelectParada = (parada: Parada, viaje: Viaje) => {
     setSelectedParada(parada);
@@ -345,6 +481,8 @@ export default function MapaScreen({ route: routeProp, navigation }: any) {
     setSelectedParada(null);
     clearRoute();
     setNavigationMode(false);
+    setSnappedLocation(null);
+    setSnappedHeading(0);
   };
 
   const startNavigation = async (parada: Parada) => {
@@ -377,13 +515,22 @@ export default function MapaScreen({ route: routeProp, navigation }: any) {
           ref={cameraRef}
           zoomLevel={navigationMode ? 16 : (userLocation ? 12 : 5)}
           centerCoordinate={navigationMode ? undefined : (userLocation || [-103.3496, 20.6736])}
-          followUserLocation={navigationMode || (!selectedParada && !!userLocation)}
-          followUserMode={(navigationMode ? 'course' : 'normal') as any}
+          followUserLocation={!navigationMode && !selectedParada && !!userLocation}
+          followUserMode={(!navigationMode ? 'normal' : undefined) as any}
           pitch={navigationMode ? 55 : 0}
-          followPitch={navigationMode ? 55 : 0}
         />
         
-        <Mapbox.UserLocation />
+        {!navigationMode && <Mapbox.UserLocation />}
+
+        {navigationMode && snappedLocation && (
+          <Mapbox.MarkerView id="snappedPuck" coordinate={snappedLocation}>
+            <View style={styles.puckContainer}>
+              <View style={[styles.puckArrow, { transform: [{ rotate: `${snappedHeading}deg` }] }]}>
+                <MaterialCommunityIcons name="navigation" size={28} color="#00b0ff" />
+              </View>
+            </View>
+          </Mapbox.MarkerView>
+        )}
 
         {/* Marcadores de Paradas */}
         {selectedViaje && selectedViaje.paradas && selectedViaje.paradas.map((parada, index) => (
@@ -428,8 +575,8 @@ export default function MapaScreen({ route: routeProp, navigation }: any) {
         })}
 
         {/* Capa de Ruta */}
-        {route && (
-          <Mapbox.ShapeSource id="routeSource" shape={route}>
+        {routeGeoJSON && (
+          <Mapbox.ShapeSource id="routeSource" shape={routeGeoJSON as any}>
             {/* Casing / Borde de contraste negro para la línea de ruta */}
             <Mapbox.LineLayer
               id="routeCasing"
@@ -441,11 +588,19 @@ export default function MapaScreen({ route: routeProp, navigation }: any) {
                 lineOpacity: 0.4,
               }}
             />
-            {/* Línea principal celeste brillante/cyan eléctrico para máxima visibilidad en modo oscuro */}
+            {/* Línea principal coloreada por tráfico */}
             <Mapbox.LineLayer
               id="routeFill"
               style={{
-                lineColor: '#00b0ff',
+                lineColor: [
+                  'match',
+                  ['get', 'congestion'],
+                  'low', '#4caf50',
+                  'moderate', '#ff9800',
+                  'heavy', '#f44336',
+                  'severe', '#8b0000',
+                  '#00b0ff'
+                ] as any,
                 lineCap: 'round',
                 lineJoin: 'round',
                 lineWidth: 6,
@@ -598,6 +753,29 @@ export default function MapaScreen({ route: routeProp, navigation }: any) {
             <Text style={styles.instructionText} numberOfLines={2}>
               {steps[currentStepIndex]?.maneuver?.instruction}
             </Text>
+            {/* Indicadores de carriles */}
+            {lanes && lanes.length > 0 && (
+              <View style={styles.lanesContainer}>
+                {lanes.map((lane: any, idx: number) => {
+                  const iconName = getLaneIcon(lane.indications);
+                  return (
+                    <View 
+                      key={`lane-${idx}`} 
+                      style={[
+                        styles.laneIconWrapper, 
+                        lane.valid ? styles.laneValid : styles.laneInvalid
+                      ]}
+                    >
+                      <MaterialCommunityIcons 
+                        name={iconName as any} 
+                        size={16} 
+                        color={lane.valid ? '#00b0ff' : 'rgba(255, 255, 255, 0.3)'} 
+                      />
+                    </View>
+                  );
+                })}
+              </View>
+            )}
           </View>
           <TouchableOpacity 
             style={styles.muteButton} 
@@ -1276,5 +1454,47 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     textTransform: 'uppercase',
     letterSpacing: 1,
+  },
+  puckContainer: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(0, 176, 255, 0.25)',
+    borderWidth: 2,
+    borderColor: '#00b0ff',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 6,
+  },
+  puckArrow: {
+    width: 28,
+    height: 28,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  lanesContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+    gap: 4,
+  },
+  laneIconWrapper: {
+    padding: 2,
+    borderRadius: 4,
+    borderWidth: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  laneValid: {
+    backgroundColor: 'rgba(0, 176, 255, 0.1)',
+    borderColor: '#00b0ff',
+  },
+  laneInvalid: {
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderColor: 'rgba(255, 255, 255, 0.15)',
   }
 });
