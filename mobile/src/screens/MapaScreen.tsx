@@ -837,10 +837,10 @@ export default function MapaScreen({ route: routeProp, navigation }: any) {
 
       {/* Botón Flotante de SOS/Emergencia */}
       <TouchableOpacity 
-        style={[styles.sosButton, { bottom: navigationMode ? 140 : (selectedParada ? 280 : 160) }]} 
+        style={styles.sosButton} 
         onPress={() => setSosModalVisible(true)}
       >
-        <MaterialCommunityIcons name="alert-decagram" size={32} color="#fff" />
+        <MaterialCommunityIcons name="alert-decagram" size={26} color="#fff" />
         <Text style={styles.sosButtonText}>SOS</Text>
       </TouchableOpacity>
 
@@ -1177,9 +1177,10 @@ const styles = StyleSheet.create({
   sosButton: {
     position: 'absolute',
     right: Spacing.md,
-    width: 65,
-    height: 65,
-    borderRadius: 32.5,
+    top: '40%',
+    width: 54,
+    height: 54,
+    borderRadius: 27,
     backgroundColor: '#dc2626',
     justifyContent: 'center',
     alignItems: 'center',
@@ -1190,10 +1191,11 @@ const styles = StyleSheet.create({
     elevation: 8,
     borderWidth: 2,
     borderColor: '#ffffff',
+    zIndex: 999,
   },
   sosButtonText: {
     color: '#ffffff',
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: '900',
     marginTop: -2,
   },
