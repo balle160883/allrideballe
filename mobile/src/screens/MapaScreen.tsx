@@ -128,6 +128,38 @@ export default function MapaScreen({ route: routeProp, navigation }: any) {
     }
   }, [viajeActivo]);
 
+  // Acomodar el zoom y encuadre del mapa según la ruta calculada
+  useEffect(() => {
+    if (route && route.coordinates && route.coordinates.length > 0) {
+      let minLng = Infinity;
+      let minLat = Infinity;
+      let maxLng = -Infinity;
+      let maxLat = -Infinity;
+
+      route.coordinates.forEach((coord: number[]) => {
+        const [lng, lat] = coord;
+        if (lng < minLng) minLng = lng;
+        if (lat < minLat) minLat = lat;
+        if (lng > maxLng) maxLng = lng;
+        if (lat > maxLat) maxLat = lat;
+      });
+
+      if (minLng !== Infinity && minLat !== Infinity && maxLng !== -Infinity && maxLat !== -Infinity) {
+        cameraRef.current?.setCamera({
+          bounds: {
+            ne: [maxLng, maxLat],
+            sw: [minLng, minLat],
+            paddingLeft: 50,
+            paddingRight: 50,
+            paddingTop: isConductor ? 200 : 80,
+            paddingBottom: selectedParada ? 260 : 120,
+          },
+          animationDuration: 1000,
+        });
+      }
+    }
+  }, [route, isConductor, !!selectedParada]);
+
   useEffect(() => {
     const params = routeProp?.params;
     if (params?.viaje) {
@@ -147,6 +179,8 @@ export default function MapaScreen({ route: routeProp, navigation }: any) {
     setSelectedParada(parada);
     if (userLocation && parada.latitud && parada.longitud) {
        fetchRoute(userLocation, [parada.longitud, parada.latitud]);
+       // El useEffect de la ruta se encargará de ajustar el zoom y encuadre automáticamente
+    } else if (parada.latitud && parada.longitud) {
        cameraRef.current?.setCamera({
           centerCoordinate: [parada.longitud, parada.latitud],
           zoomLevel: 14,
@@ -164,11 +198,7 @@ export default function MapaScreen({ route: routeProp, navigation }: any) {
     if (userLocation && parada.latitud && parada.longitud) {
       setSelectedParada(parada);
       await fetchRoute(userLocation, [parada.longitud, parada.latitud]);
-      cameraRef.current?.setCamera({
-        centerCoordinate: [parada.longitud, parada.latitud],
-        zoomLevel: 15,
-        animationDuration: 1000
-      });
+      // El useEffect de la ruta se encargará de ajustar el zoom y encuadre automáticamente
     } else {
       Alert.alert('Navegación', 'No se pudo obtener tu ubicación actual o la de la parada para trazar la ruta en Mapbox.');
     }
@@ -244,13 +274,26 @@ export default function MapaScreen({ route: routeProp, navigation }: any) {
         {/* Capa de Ruta */}
         {route && (
           <Mapbox.ShapeSource id="routeSource" shape={route}>
+            {/* Casing / Borde de contraste negro para la línea de ruta */}
+            <Mapbox.LineLayer
+              id="routeCasing"
+              style={{
+                lineColor: '#000000',
+                lineCap: 'round',
+                lineJoin: 'round',
+                lineWidth: 10,
+                lineOpacity: 0.4,
+              }}
+            />
+            {/* Línea principal celeste brillante/cyan eléctrico para máxima visibilidad en modo oscuro */}
             <Mapbox.LineLayer
               id="routeFill"
               style={{
-                lineColor: Colors.primary,
+                lineColor: '#00b0ff',
                 lineCap: 'round',
-                lineWidth: 5,
-                lineOpacity: 0.8,
+                lineJoin: 'round',
+                lineWidth: 6,
+                lineOpacity: 0.95,
               }}
             />
           </Mapbox.ShapeSource>
