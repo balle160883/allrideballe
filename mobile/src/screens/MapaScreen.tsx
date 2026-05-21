@@ -12,7 +12,7 @@ import { api } from '../api/backend';
 const MAPBOX_ACCESS_TOKEN = 'pk.eyJ1IjoiZGpiYjE2MDg4MyIsImEiOiJjbW4zY2o0dTUwOGdxMnFvYmJwZ2xzbnUwIn0.Yv7408j9tAieaX-YB-vAwg';
 Mapbox.setAccessToken(MAPBOX_ACCESS_TOKEN);
 
-export default function MapaScreen({ navigation }: any) {
+export default function MapaScreen({ route: routeProp, navigation }: any) {
   const { viajes } = useViajes();
   const { user } = useAuth();
   const { route, fetchRoute, clearRoute, loading: routeLoading } = useDirections();
@@ -128,6 +128,21 @@ export default function MapaScreen({ navigation }: any) {
     }
   }, [viajeActivo]);
 
+  useEffect(() => {
+    const params = routeProp?.params;
+    if (params?.viaje) {
+      setSelectedViaje(params.viaje);
+      if (params.viaje.paradas && params.viaje.paradas.length > 0) {
+        const primeraParada = params.viaje.paradas[0];
+        cameraRef.current?.setCamera({
+          centerCoordinate: [primeraParada.longitud, primeraParada.latitud],
+          zoomLevel: 12,
+          animationDuration: 1000
+        });
+      }
+    }
+  }, [routeProp?.params]);
+
   const handleSelectParada = (parada: Parada, viaje: Viaje) => {
     setSelectedParada(parada);
     if (userLocation && parada.latitud && parada.longitud) {
@@ -146,29 +161,16 @@ export default function MapaScreen({ navigation }: any) {
   };
 
   const startNavigation = async (parada: Parada) => {
-    const lat = parada.latitud;
-    const lng = parada.longitud;
-    
-    const wazeNativeUrl = `waze://ul?ll=${lat},${lng}&navigate=yes`;
-    const googleMapsUrl = `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
-
-    try {
-      // 1. Intentamos verificar si podemos abrir la app nativa de Waze
-      const canOpenWaze = await Linking.canOpenURL('waze://');
-      if (canOpenWaze) {
-        await Linking.openURL(wazeNativeUrl);
-      } else {
-        // 2. Si canOpenWaze da falso negativo debido a políticas de visibilidad de paquetes en Android 11+,
-        // intentamos forzar la apertura de la url nativa de Waze.
-        try {
-          await Linking.openURL(wazeNativeUrl);
-        } catch {
-          // 3. Fallback final: Abrir Google Maps si Waze no está instalado o falla
-          await Linking.openURL(googleMapsUrl);
-        }
-      }
-    } catch (error) {
-      Alert.alert('Error', 'No se pudo abrir la aplicación de navegación.');
+    if (userLocation && parada.latitud && parada.longitud) {
+      setSelectedParada(parada);
+      await fetchRoute(userLocation, [parada.longitud, parada.latitud]);
+      cameraRef.current?.setCamera({
+        centerCoordinate: [parada.longitud, parada.latitud],
+        zoomLevel: 15,
+        animationDuration: 1000
+      });
+    } else {
+      Alert.alert('Navegación', 'No se pudo obtener tu ubicación actual o la de la parada para trazar la ruta en Mapbox.');
     }
   };
 

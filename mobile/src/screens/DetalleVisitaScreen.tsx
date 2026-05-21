@@ -106,35 +106,9 @@ export default function DetalleViajeScreen({ route, navigation }: any) {
     navigation.navigate('RegistroVisita', { visita: scanData, onScanSuccess: fetchManifiesto });
   };
 
-  const handleNavigate = async () => {
-    // Obtenemos la última parada de la ruta para usarla como destino final
-    const ultimaParada = viaje.paradas && viaje.paradas.length > 0
-      ? viaje.paradas[viaje.paradas.length - 1]
-      : null;
-
-    const lat = ultimaParada ? ultimaParada.latitud : (viaje.latitud || 20.6736);
-    const lng = ultimaParada ? ultimaParada.longitud : (viaje.longitud || -103.3496);
-    const wazeNativeUrl = `waze://ul?ll=${lat},${lng}&navigate=yes`;
-    const googleMapsUrl = `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
-
-    try {
-      // 1. Intentamos verificar si podemos abrir la app nativa de Waze
-      const canOpenWaze = await Linking.canOpenURL('waze://');
-      if (canOpenWaze) {
-        await Linking.openURL(wazeNativeUrl);
-      } else {
-        // 2. Si canOpenWaze da falso negativo debido a políticas de visibilidad de paquetes en Android 11+,
-        // intentamos forzar la apertura de la url nativa de Waze.
-        try {
-          await Linking.openURL(wazeNativeUrl);
-        } catch {
-          // 3. Fallback final: Abrir Google Maps si Waze no está instalado o falla
-          await Linking.openURL(googleMapsUrl);
-        }
-      }
-    } catch (error) {
-      Alert.alert('Error', 'No se pudo abrir la aplicación de navegación.');
-    }
+  const handleNavigate = () => {
+    // Redirigir al conductor directamente a la pestaña del Mapa para que visualice la ruta en Mapbox
+    navigation.navigate('Mapa', { viaje: { ...viaje, id: viajeId } });
   };
 
   // Métricas del manifiesto
