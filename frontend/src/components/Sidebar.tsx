@@ -13,7 +13,8 @@ import {
   Users,
   CheckSquare,
   BarChart3,
-  Briefcase
+  Briefcase,
+  Building2
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
@@ -103,6 +104,7 @@ export function Sidebar({ isOpen, onClose }: { isOpen?: boolean, onClose?: () =>
     { icon: Route, label: 'Smart Routing 🚀', href: '/admin/rutas/smart', adminOnly: true },
     { icon: Bus, label: 'Vehículos & Flota', href: '/admin/vehiculos', adminOnly: true },
     { icon: Briefcase, label: 'Conductores', href: '/admin/conductores', adminOnly: true },
+    { icon: Building2, label: 'Proveedores', href: '/admin/proveedores', adminOnly: true },
     { icon: Users, label: 'Pasajeros & Empleados', href: '/admin/pasajeros', adminOnly: true },
     { icon: Calendar, label: 'Viajes & Reservas', href: '/admin/viajes', allowedRoles: ['admin', 'gerente'] },
     { icon: CheckSquare, label: 'Aprobaciones', href: '/admin/aprobaciones', allowedRoles: ['admin', 'gerente'], badge: pendingCount },

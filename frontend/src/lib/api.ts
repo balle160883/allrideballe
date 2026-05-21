@@ -163,6 +163,41 @@ export async function deleteConductor(id: string) {
   return res.json();
 }
 
+export async function fetchProveedores(): Promise<any[]> {
+  const res = await fetch(`${API_URL}/transporte/proveedores`, { headers: getAuthHeader() });
+  if (!res.ok) throw new Error('Failed to fetch proveedores');
+  return res.json();
+}
+
+export async function createProveedor(data: any) {
+  const res = await fetch(`${API_URL}/transporte/proveedores`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error('Failed to create proveedor');
+  return res.json();
+}
+
+export async function updateProveedor(id: string, data: any) {
+  const res = await fetch(`${API_URL}/transporte/proveedores/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error('Failed to update proveedor');
+  return res.json();
+}
+
+export async function deleteProveedor(id: string) {
+  const res = await fetch(`${API_URL}/transporte/proveedores/${id}`, {
+    method: 'DELETE',
+    headers: getAuthHeader(),
+  });
+  if (!res.ok) throw new Error('Failed to delete proveedor');
+  return res.json();
+}
+
 export async function fetchPasajeros(): Promise<any[]> {
   const res = await fetch(`${API_URL}/transporte/pasajeros`, { headers: getAuthHeader() });
   if (!res.ok) throw new Error('Failed to fetch pasajeros');

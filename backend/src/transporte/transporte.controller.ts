@@ -77,6 +77,29 @@ export class TransporteController {
     return this.transporteService.deleteConductor(id);
   }
 
+  // ==========================================
+  // ADMIN PROVEEDORES
+  // ==========================================
+  @Get('proveedores')
+  async getAdminProveedores() {
+    return this.transporteService.getAdminProveedores();
+  }
+
+  @Post('proveedores')
+  async createAdminProveedor(@Body() data: { email: string; nombre: string; gestor_code?: string }) {
+    return this.transporteService.createAdminProveedor(data);
+  }
+
+  @Patch('proveedores/:id')
+  async updateAdminProveedor(@Param('id') id: string, @Body() data: any) {
+    return this.transporteService.updateAdminProveedor(id, data);
+  }
+
+  @Delete('proveedores/:id')
+  async deleteAdminProveedor(@Param('id') id: string) {
+    return this.transporteService.deleteAdminProveedor(id);
+  }
+
   @Get('pasajeros')
   async getPasajeros() {
     return this.transporteService.getPasajeros();
