@@ -49,32 +49,60 @@ export function useViajes() {
     if (!user) return;
     setLoading(true);
     try {
-      const data = await api.get('/transporte/reservas/pasajero');
-      const mapped: Viaje[] = (data || []).map((v: any) => ({
-        id: v.reserva_id.toString(),
-        reserva_id: v.reserva_id,
-        viaje_id: v.viaje_id,
-        ruta_nombre: v.ruta_nombre || 'Ruta sin nombre',
-        conductor_nombre: v.conductor_nombre || 'Sin conductor asignado',
-        origen: v.origen || 'Origen no especificado',
-        destino: v.destino || 'Destino no especificado',
-        paradas: v.paradas || [],
-        estado: v.viaje_estado || 'programado',
-        viaje_estado: v.viaje_estado || 'programado',
-        patente: v.patente || 'S/P',
-        modelo: v.modelo || 'Unidad',
-        capacidad: v.capacidad || 30,
-        fecha_hora_salida: new Date(v.fecha_hora_salida).getTime(),
-        ultima_ubicacion: v.ultima_ubicacion ? {
-          latitud: Number(v.ultima_ubicacion.latitud),
-          longitud: Number(v.ultima_ubicacion.longitud),
-          velocidad: v.ultima_ubicacion.velocidad ? Number(v.ultima_ubicacion.velocidad) : undefined,
-          timestamp: v.ultima_ubicacion.timestamp
-        } : undefined,
-        asiento_numero: v.asiento_numero,
-        reserva_estado: v.reserva_estado,
-        isRealizada: v.viaje_estado === 'completado',
-      }));
+      const isConductor = user.rol === 'conductor';
+      const endpoint = isConductor ? '/transporte/viajes' : '/transporte/reservas/pasajero';
+      const data = await api.get(endpoint);
+      
+      const mapped: Viaje[] = (data || []).map((v: any) => {
+        if (isConductor) {
+          return {
+            id: v.id.toString(),
+            reserva_id: 0,
+            viaje_id: v.id,
+            ruta_nombre: v.ruta_nombre || 'Ruta sin nombre',
+            conductor_nombre: v.conductor_nombre || 'Sin conductor asignado',
+            origen: v.origen || 'Origen no especificado',
+            destino: v.destino || 'Destino no especificado',
+            paradas: v.paradas || [],
+            estado: v.estado || 'programado',
+            viaje_estado: v.estado || 'programado',
+            patente: v.patente || 'S/P',
+            modelo: v.modelo || 'Unidad',
+            capacidad: v.capacidad || 30,
+            fecha_hora_salida: new Date(v.fecha_hora_salida).getTime(),
+            ultima_ubicacion: undefined,
+            asiento_numero: 0,
+            reserva_estado: 'confirmado',
+            isRealizada: v.estado === 'completado',
+          };
+        } else {
+          return {
+            id: v.reserva_id.toString(),
+            reserva_id: v.reserva_id,
+            viaje_id: v.viaje_id,
+            ruta_nombre: v.ruta_nombre || 'Ruta sin nombre',
+            conductor_nombre: v.conductor_nombre || 'Sin conductor asignado',
+            origen: v.origen || 'Origen no especificado',
+            destino: v.destino || 'Destino no especificado',
+            paradas: v.paradas || [],
+            estado: v.viaje_estado || 'programado',
+            viaje_estado: v.viaje_estado || 'programado',
+            patente: v.patente || 'S/P',
+            modelo: v.modelo || 'Unidad',
+            capacidad: v.capacidad || 30,
+            fecha_hora_salida: new Date(v.fecha_hora_salida).getTime(),
+            ultima_ubicacion: v.ultima_ubicacion ? {
+              latitud: Number(v.ultima_ubicacion.latitud),
+              longitud: Number(v.ultima_ubicacion.longitud),
+              velocidad: v.ultima_ubicacion.velocidad ? Number(v.ultima_ubicacion.velocidad) : undefined,
+              timestamp: v.ultima_ubicacion.timestamp
+            } : undefined,
+            asiento_numero: v.asiento_numero,
+            reserva_estado: v.reserva_estado,
+            isRealizada: v.viaje_estado === 'completado',
+          };
+        }
+      });
       setViajes(mapped);
     } catch (e) {
       console.error('Error fetching viajes:', e);
