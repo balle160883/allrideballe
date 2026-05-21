@@ -40,4 +40,31 @@ export class AppController {
       };
     }
   }
+
+  @Get('temp-check-viajes')
+  async checkViajes() {
+    try {
+      const viajesRes = await this.databaseService.query(`
+        SELECT v.id, v.estado, v.fecha_hora_salida, r.nombre as ruta_nombre, u.email as conductor_email
+        FROM viajes v
+        LEFT JOIN rutas r ON v.ruta_id = r.id
+        LEFT JOIN usuarios u ON v.conductor_id = u.id
+        ORDER BY v.fecha_hora_salida DESC
+      `);
+      const locationsRes = await this.databaseService.query(`
+        SELECT uf.id, uf.viaje_id, uf.latitud, uf.longitud, uf.velocidad, uf.timestamp, r.nombre as ruta_nombre
+        FROM ubicaciones_flota uf
+        LEFT JOIN viajes v ON uf.viaje_id = v.id
+        LEFT JOIN rutas r ON v.ruta_id = r.id
+        ORDER BY uf.timestamp DESC
+        LIMIT 30
+      `);
+      return {
+        viajes: viajesRes.rows,
+        locations: locationsRes.rows
+      };
+    } catch (e: any) {
+      return { error: e.message };
+    }
+  }
 }
