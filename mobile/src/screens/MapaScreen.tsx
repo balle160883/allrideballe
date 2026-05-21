@@ -61,15 +61,23 @@ export default function MapaScreen({ navigation }: any) {
     const lat = parada.latitud;
     const lng = parada.longitud;
     
-    const wazeUrl = `https://waze.com/ul?ll=${lat},${lng}&navigate=yes`;
+    const wazeNativeUrl = `waze://ul?ll=${lat},${lng}&navigate=yes`;
     const googleMapsUrl = `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
 
     try {
+      // 1. Intentamos verificar si podemos abrir la app nativa de Waze
       const canOpenWaze = await Linking.canOpenURL('waze://');
       if (canOpenWaze) {
-        await Linking.openURL(wazeUrl);
+        await Linking.openURL(wazeNativeUrl);
       } else {
-        await Linking.openURL(googleMapsUrl);
+        // 2. Si canOpenWaze da falso negativo debido a políticas de visibilidad de paquetes en Android 11+,
+        // intentamos forzar la apertura de la url nativa de Waze.
+        try {
+          await Linking.openURL(wazeNativeUrl);
+        } catch {
+          // 3. Fallback final: Abrir Google Maps si Waze no está instalado o falla
+          await Linking.openURL(googleMapsUrl);
+        }
       }
     } catch (error) {
       Alert.alert('Error', 'No se pudo abrir la aplicación de navegación.');

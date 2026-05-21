@@ -24,6 +24,12 @@
       },
       "predictiveBackGestureEnabled": false,
       "package": "com.viaempresas.mobile",
+      "queries": {
+        "schemes": [
+          "waze",
+          "google.navigation"
+        ]
+      },
       "permissions": [
         "ACCESS_COARSE_LOCATION",
         "ACCESS_FINE_LOCATION",
