@@ -109,13 +109,26 @@ export default function DetalleViajeScreen({ route, navigation }: any) {
   const handleNavigate = async () => {
     const lat = viaje.latitud || 20.6736;
     const lng = viaje.longitud || -103.3496;
-    const wazeUrl = `https://waze.com/ul?ll=${lat},${lng}&navigate=yes`;
-    const googleUrl = `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
+    const wazeNativeUrl = `waze://ul?ll=${lat},${lng}&navigate=yes`;
+    const googleMapsUrl = `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
+
     try {
-      const canWaze = await Linking.canOpenURL('waze://');
-      await Linking.openURL(canWaze ? wazeUrl : googleUrl);
-    } catch {
-      Alert.alert('Error', 'No se pudo abrir la aplicación de mapas.');
+      // 1. Intentamos verificar si podemos abrir la app nativa de Waze
+      const canOpenWaze = await Linking.canOpenURL('waze://');
+      if (canOpenWaze) {
+        await Linking.openURL(wazeNativeUrl);
+      } else {
+        // 2. Si canOpenWaze da falso negativo debido a políticas de visibilidad de paquetes en Android 11+,
+        // intentamos forzar la apertura de la url nativa de Waze.
+        try {
+          await Linking.openURL(wazeNativeUrl);
+        } catch {
+          // 3. Fallback final: Abrir Google Maps si Waze no está instalado o falla
+          await Linking.openURL(googleMapsUrl);
+        }
+      }
+    } catch (error) {
+      Alert.alert('Error', 'No se pudo abrir la aplicación de navegación.');
     }
   };
 
