@@ -8,18 +8,79 @@ import * as Location from 'expo-location';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../api/backend';
+import * as Speech from 'expo-speech';
 
 const MAPBOX_ACCESS_TOKEN = 'pk.eyJ1IjoiZGpiYjE2MDg4MyIsImEiOiJjbW4zY2o0dTUwOGdxMnFvYmJwZ2xzbnUwIn0.Yv7408j9tAieaX-YB-vAwg';
 Mapbox.setAccessToken(MAPBOX_ACCESS_TOKEN);
 
+// Helper para calcular la distancia en metros entre dos coordenadas [lng, lat]
+function getDistance(coords1: number[], coords2: number[]) {
+  const [lon1, lat1] = coords1;
+  const [lon2, lat2] = coords2;
+  const R = 6371000;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = 
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
+// Mapeo de tipos de maniobra de Mapbox a iconos de MaterialCommunityIcons
+function getManeuverIcon(type?: string, modifier?: string): string {
+  if (!type) return 'navigation-variant';
+  if (type === 'arrive') return 'flag-checkered';
+  if (type === 'depart') return 'navigation';
+  
+  switch (modifier) {
+    case 'left': return 'arrow-left-bold';
+    case 'right': return 'arrow-right-bold';
+    case 'slight left': return 'arrow-top-left-bold';
+    case 'slight right': return 'arrow-top-right-bold';
+    case 'sharp left': return 'arrow-left-bold-box';
+    case 'sharp right': return 'arrow-right-bold-box';
+    case 'straight': return 'arrow-up-bold';
+    case 'uturn': return 'swap-vertical-bold';
+    default: return 'navigation-variant';
+  }
+}
+
 export default function MapaScreen({ route: routeProp, navigation }: any) {
   const { viajes } = useViajes();
   const { user } = useAuth();
-  const { route, fetchRoute, clearRoute, loading: routeLoading } = useDirections();
+  const { route, steps, duration, distance, fetchRoute, clearRoute, loading: routeLoading } = useDirections();
   const [userLocation, setUserLocation] = useState<number[] | null>(null);
   const [selectedViaje, setSelectedViaje] = useState<Viaje | null>(null);
   const [selectedParada, setSelectedParada] = useState<Parada | null>(null);
+  const [navigationMode, setNavigationMode] = useState(false);
+  const [currentStepIndex, setCurrentStepIndex] = useState(0);
+  const [distanceToNextStep, setDistanceToNextStep] = useState(0);
+  const [isMuted, setIsMuted] = useState(false);
   const cameraRef = useRef<Mapbox.Camera>(null);
+
+  const calculateRemainingStats = () => {
+    if (!steps || steps.length === 0 || currentStepIndex >= steps.length) {
+      return { distKm: '0.0', timeMin: 0 };
+    }
+
+    let remainingMeters = distanceToNextStep;
+    for (let i = currentStepIndex + 1; i < steps.length; i++) {
+      remainingMeters += steps[i].distance || 0;
+    }
+
+    const distKm = (remainingMeters / 1000).toFixed(1);
+    
+    const ratio = Math.min(Math.max(distanceToNextStep / (steps[currentStepIndex].distance || 1), 0), 1);
+    let remainingSeconds = ratio * (steps[currentStepIndex].duration || 1);
+    for (let i = currentStepIndex + 1; i < steps.length; i++) {
+      remainingSeconds += steps[i].duration || 0;
+    }
+    const timeMin = Math.round(remainingSeconds / 60);
+
+    return { distKm, timeMin };
+  };
 
   // SOS Emergency States
   const [sosModalVisible, setSosModalVisible] = useState(false);
@@ -112,15 +173,38 @@ export default function MapaScreen({ route: routeProp, navigation }: any) {
   const viajesActivos = viajes.filter(v => v.viaje_estado === 'en_ruta' || v.viaje_estado === 'programado');
   const viajeActivo = viajesActivos[0] || null;
 
+  // Rastreo continuo de ubicación con frecuencia y precisión dinámica
   useEffect(() => {
-    (async () => {
+    let subscription: Location.LocationSubscription | null = null;
+
+    const startTracking = async () => {
       let { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') return;
 
-      let location = await Location.getCurrentPositionAsync({});
-      setUserLocation([location.coords.longitude, location.coords.latitude]);
-    })();
-  }, []);
+      const accuracy = navigationMode 
+        ? Location.Accuracy.BestForNavigation 
+        : Location.Accuracy.Balanced;
+
+      subscription = await Location.watchPositionAsync(
+        {
+          accuracy,
+          timeInterval: navigationMode ? 1000 : 5000,
+          distanceInterval: navigationMode ? 2 : 10,
+        },
+        (loc) => {
+          setUserLocation([loc.coords.longitude, loc.coords.latitude]);
+        }
+      );
+    };
+
+    startTracking();
+
+    return () => {
+      if (subscription) {
+        subscription.remove();
+      }
+    };
+  }, [navigationMode]);
 
   useEffect(() => {
     if (viajeActivo && !selectedViaje) {
@@ -128,8 +212,9 @@ export default function MapaScreen({ route: routeProp, navigation }: any) {
     }
   }, [viajeActivo]);
 
-  // Acomodar el zoom y encuadre del mapa según la ruta calculada
+  // Acomodar el zoom y encuadre del mapa según la ruta calculada (solo en vista normal)
   useEffect(() => {
+    if (navigationMode) return;
     if (route && route.coordinates && route.coordinates.length > 0) {
       let minLng = Infinity;
       let minLat = Infinity;
@@ -158,7 +243,7 @@ export default function MapaScreen({ route: routeProp, navigation }: any) {
         });
       }
     }
-  }, [route, isConductor, !!selectedParada]);
+  }, [route, isConductor, !!selectedParada, navigationMode]);
 
   useEffect(() => {
     const params = routeProp?.params;
@@ -174,6 +259,73 @@ export default function MapaScreen({ route: routeProp, navigation }: any) {
       }
     }
   }, [routeProp?.params]);
+
+  // Reiniciar el índice de pasos cuando la ruta cambie
+  useEffect(() => {
+    setCurrentStepIndex(0);
+  }, [route]);
+
+  // Anuncio inicial de voz al entrar en navegación
+  useEffect(() => {
+    if (navigationMode && steps && steps.length > 0) {
+      setCurrentStepIndex(0);
+      const firstStep = steps[0];
+      if (firstStep && firstStep.maneuver && firstStep.maneuver.instruction && !isMuted) {
+        Speech.speak(firstStep.maneuver.instruction, { language: 'es' });
+      }
+    }
+  }, [navigationMode]);
+
+  // Loop de navegación paso a paso
+  useEffect(() => {
+    if (!navigationMode || !userLocation || !steps || steps.length === 0) return;
+
+    const step = steps[currentStepIndex];
+    if (!step || !step.maneuver || !step.maneuver.location) return;
+
+    const distToManeuver = getDistance(userLocation, step.maneuver.location);
+    setDistanceToNextStep(distToManeuver);
+
+    if (distToManeuver < 20) {
+      if (currentStepIndex < steps.length - 1) {
+        const nextIdx = currentStepIndex + 1;
+        setCurrentStepIndex(nextIdx);
+        
+        const nextStep = steps[nextIdx];
+        if (nextStep && nextStep.maneuver && nextStep.maneuver.instruction && !isMuted) {
+          Speech.speak(nextStep.maneuver.instruction, { language: 'es' });
+        }
+      } else {
+        if (!isMuted) {
+          Speech.speak("Has llegado a tu destino", { language: 'es' });
+        }
+        Alert.alert("Navegación", "Has llegado a tu destino final.");
+        setNavigationMode(false);
+        handleCloseDetail();
+      }
+      return;
+    }
+
+    if (route && route.coordinates && route.coordinates.length > 0) {
+      let isOffRoute = true;
+      for (let i = 0; i < route.coordinates.length; i++) {
+        const d = getDistance(userLocation, route.coordinates[i]);
+        if (d < 40) {
+          isOffRoute = false;
+          break;
+        }
+      }
+
+      if (isOffRoute && selectedParada && selectedParada.longitud && selectedParada.latitud) {
+        console.log("Vehículo desviado, recalculando ruta...");
+        if (!isMuted) {
+          Speech.speak("Recalculando ruta", { language: 'es' });
+        }
+        fetchRoute(userLocation, [selectedParada.longitud, selectedParada.latitud]);
+        setCurrentStepIndex(0);
+      }
+    }
+  }, [userLocation, navigationMode, currentStepIndex, steps, isMuted, route, selectedParada]);
 
   const handleSelectParada = (parada: Parada, viaje: Viaje) => {
     setSelectedParada(parada);
@@ -192,13 +344,14 @@ export default function MapaScreen({ route: routeProp, navigation }: any) {
   const handleCloseDetail = () => {
     setSelectedParada(null);
     clearRoute();
+    setNavigationMode(false);
   };
 
   const startNavigation = async (parada: Parada) => {
     if (userLocation && parada.latitud && parada.longitud) {
       setSelectedParada(parada);
+      setNavigationMode(true);
       await fetchRoute(userLocation, [parada.longitud, parada.latitud]);
-      // El useEffect de la ruta se encargará de ajustar el zoom y encuadre automáticamente
     } else {
       Alert.alert('Navegación', 'No se pudo obtener tu ubicación actual o la de la parada para trazar la ruta en Mapbox.');
     }
@@ -222,9 +375,12 @@ export default function MapaScreen({ route: routeProp, navigation }: any) {
       <Mapbox.MapView style={styles.map} logoEnabled={false} attributionEnabled={false} styleURL={Mapbox.StyleURL.Dark}>
         <Mapbox.Camera
           ref={cameraRef}
-          zoomLevel={userLocation ? 12 : 5}
-          centerCoordinate={userLocation || [-103.3496, 20.6736]}
-          followUserLocation={!selectedParada && !!userLocation}
+          zoomLevel={navigationMode ? 16 : (userLocation ? 12 : 5)}
+          centerCoordinate={navigationMode ? undefined : (userLocation || [-103.3496, 20.6736])}
+          followUserLocation={navigationMode || (!selectedParada && !!userLocation)}
+          followUserMode={(navigationMode ? 'course' : 'normal') as any}
+          pitch={navigationMode ? 55 : 0}
+          followPitch={navigationMode ? 55 : 0}
         />
         
         <Mapbox.UserLocation />
@@ -301,7 +457,7 @@ export default function MapaScreen({ route: routeProp, navigation }: any) {
       </Mapbox.MapView>
 
       {/* Panel de selección de viaje (para conductor) */}
-      {isConductor && (
+      {!navigationMode && isConductor && (
         <View style={styles.viajeSelector}>
           <ScrollView horizontal showsHorizontalScrollIndicator={false}>
             {viajesActivos.length === 0 ? (
@@ -331,7 +487,7 @@ export default function MapaScreen({ route: routeProp, navigation }: any) {
       )}
 
       {/* Lista de paradas (para conductor) */}
-      {isConductor && selectedViaje && (
+      {!navigationMode && isConductor && selectedViaje && (
         <View style={styles.listaParadas}>
           <View style={styles.listaHeader}>
             <Text style={styles.listaTitulo}>Paradas de la ruta</Text>
@@ -372,7 +528,7 @@ export default function MapaScreen({ route: routeProp, navigation }: any) {
       )}
 
       {/* Panel de detalle de parada */}
-      {selectedParada && (
+      {!navigationMode && selectedParada && (
         <View style={styles.paradaInfo}>
            <View style={styles.paradaInfoHeader}>
               <View style={styles.paradaInfoTituloRow}>
@@ -417,15 +573,93 @@ export default function MapaScreen({ route: routeProp, navigation }: any) {
       )}
 
       {/* Leyenda (si no hay detalles) */}
-      {!selectedParada && !isConductor && (
+      {!navigationMode && !selectedParada && !isConductor && (
          <View style={styles.legend}>
             <Text style={styles.legendText}>{viajes.length} viajes registrados</Text>
          </View>
       )}
 
+      {/* Panel Superior de Instrucciones Turn-by-Turn */}
+      {navigationMode && steps && steps[currentStepIndex] && (
+        <View style={styles.navigationHeader}>
+          <View style={styles.maneuverIconContainer}>
+            <MaterialCommunityIcons 
+              name={getManeuverIcon(steps[currentStepIndex]?.maneuver?.type, steps[currentStepIndex]?.maneuver?.modifier) as any} 
+              size={36} 
+              color="#00b0ff" 
+            />
+          </View>
+          <View style={styles.instructionTextContainer}>
+            <Text style={styles.instructionDistance}>
+              {distanceToNextStep > 1000 
+                ? `En ${(distanceToNextStep / 1000).toFixed(1)} km` 
+                : `En ${Math.round(distanceToNextStep)} m`}
+            </Text>
+            <Text style={styles.instructionText} numberOfLines={2}>
+              {steps[currentStepIndex]?.maneuver?.instruction}
+            </Text>
+          </View>
+          <TouchableOpacity 
+            style={styles.muteButton} 
+            onPress={() => setIsMuted(!isMuted)}
+          >
+            <MaterialCommunityIcons 
+              name={isMuted ? "volume-off" : "volume-high"} 
+              size={24} 
+              color="#fff" 
+            />
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* Panel Inferior de Datos de Viaje Turn-by-Turn */}
+      {navigationMode && (
+        <View style={styles.navigationFooter}>
+          <View style={styles.statsContainer}>
+            <View style={styles.statColumn}>
+              <Text style={styles.statValue}>
+                {calculateRemainingStats().timeMin}
+              </Text>
+              <Text style={styles.statLabel}>min</Text>
+            </View>
+            <View style={styles.statDivider} />
+            <View style={styles.statColumn}>
+              <Text style={styles.statValue}>
+                {calculateRemainingStats().distKm}
+              </Text>
+              <Text style={styles.statLabel}>km</Text>
+            </View>
+            <View style={styles.statDivider} />
+            <View style={styles.statColumn}>
+              <Text style={styles.statValue}>
+                {(() => {
+                  const etaTime = new Date(Date.now() + calculateRemainingStats().timeMin * 60000);
+                  let hours = etaTime.getHours();
+                  const minutes = etaTime.getMinutes().toString().padStart(2, '0');
+                  const ampm = hours >= 12 ? 'PM' : 'AM';
+                  hours = hours % 12;
+                  hours = hours ? hours : 12;
+                  return `${hours}:${minutes} ${ampm}`;
+                })()}
+              </Text>
+              <Text style={styles.statLabel}>ETA</Text>
+            </View>
+          </View>
+          <TouchableOpacity 
+            style={styles.exitNavigationButton} 
+            onPress={() => {
+              setNavigationMode(false);
+              handleCloseDetail();
+            }}
+          >
+            <Text style={styles.exitNavigationButtonText}>Salir</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
       {/* Botón Flotante de SOS/Emergencia */}
       <TouchableOpacity 
-        style={[styles.sosButton, { bottom: selectedParada ? 280 : 160 }]} 
+        style={[styles.sosButton, { bottom: navigationMode ? 140 : (selectedParada ? 280 : 160) }]} 
         onPress={() => setSosModalVisible(true)}
       >
         <MaterialCommunityIcons name="alert-decagram" size={32} color="#fff" />
@@ -930,5 +1164,117 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 16,
     fontWeight: '800',
+  },
+  navigationHeader: {
+    position: 'absolute',
+    top: Spacing.xl + 10,
+    left: Spacing.md,
+    right: Spacing.md,
+    backgroundColor: 'rgba(15, 23, 42, 0.95)',
+    borderRadius: 16,
+    padding: Spacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  maneuverIconContainer: {
+    width: 54,
+    height: 54,
+    borderRadius: 27,
+    backgroundColor: 'rgba(0, 176, 255, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  instructionTextContainer: {
+    flex: 1,
+    marginLeft: Spacing.md,
+  },
+  instructionDistance: {
+    color: '#00b0ff',
+    fontSize: 18,
+    fontWeight: '900',
+    letterSpacing: 0.5,
+  },
+  instructionText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '700',
+    marginTop: 2,
+    lineHeight: 18,
+  },
+  muteButton: {
+    padding: 10,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 20,
+    marginLeft: Spacing.sm,
+  },
+  navigationFooter: {
+    position: 'absolute',
+    bottom: Spacing.xl,
+    left: Spacing.md,
+    right: Spacing.md,
+    backgroundColor: 'rgba(15, 23, 42, 0.95)',
+    borderRadius: 20,
+    padding: Spacing.md,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -6 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  statsContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: Spacing.sm,
+    marginBottom: Spacing.md,
+  },
+  statColumn: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  statValue: {
+    color: '#ffffff',
+    fontSize: 22,
+    fontWeight: '900',
+  },
+  statLabel: {
+    color: '#94a3b8',
+    fontSize: 11,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    marginTop: 2,
+  },
+  statDivider: {
+    width: 1.5,
+    height: 30,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+  },
+  exitNavigationButton: {
+    backgroundColor: '#dc2626',
+    height: 50,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  exitNavigationButtonText: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 1,
   }
 });
