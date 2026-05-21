@@ -62,6 +62,21 @@ export class TransporteController {
     return this.transporteService.getConductores();
   }
 
+  @Post('conductores')
+  async createConductor(@Body() data: { email: string; nombre: string; gestor_code?: string }) {
+    return this.transporteService.createConductor(data);
+  }
+
+  @Patch('conductores/:id')
+  async updateConductor(@Param('id') id: string, @Body() data: any) {
+    return this.transporteService.updateConductor(id, data);
+  }
+
+  @Delete('conductores/:id')
+  async deleteConductor(@Param('id') id: string) {
+    return this.transporteService.deleteConductor(id);
+  }
+
   @Get('pasajeros')
   async getPasajeros() {
     return this.transporteService.getPasajeros();

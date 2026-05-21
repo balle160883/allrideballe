@@ -134,6 +134,35 @@ export async function fetchConductores(): Promise<any[]> {
   return res.json();
 }
 
+export async function createConductor(data: any) {
+  const res = await fetch(`${API_URL}/transporte/conductores`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error('Failed to create conductor');
+  return res.json();
+}
+
+export async function updateConductor(id: string, data: any) {
+  const res = await fetch(`${API_URL}/transporte/conductores/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error('Failed to update conductor');
+  return res.json();
+}
+
+export async function deleteConductor(id: string) {
+  const res = await fetch(`${API_URL}/transporte/conductores/${id}`, {
+    method: 'DELETE',
+    headers: getAuthHeader(),
+  });
+  if (!res.ok) throw new Error('Failed to delete conductor');
+  return res.json();
+}
+
 export async function fetchPasajeros(): Promise<any[]> {
   const res = await fetch(`${API_URL}/transporte/pasajeros`, { headers: getAuthHeader() });
   if (!res.ok) throw new Error('Failed to fetch pasajeros');

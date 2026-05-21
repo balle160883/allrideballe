@@ -521,6 +521,81 @@ export class TransporteService {
     return { success: true, message: 'Pasajero eliminado correctamente.' };
   }
 
+  async createConductor(data: { email: string; nombre: string; gestor_code?: string }) {
+    const emailLower = data.email.trim().toLowerCase();
+    const emailCheck = await this.databaseService.query(
+      'SELECT id FROM "usuarios" WHERE "email" = $1',
+      [emailLower]
+    );
+    if (emailCheck.rows.length > 0) {
+      throw new Error('El correo electrónico ya está registrado.');
+    }
+
+    const passwordHash = await bcrypt.hash('Conductor2026@', 10);
+
+    const result = await this.databaseService.query(
+      'INSERT INTO "usuarios" ("email", "password_hash", "nombre", "rol", "gestor_code") VALUES ($1, $2, $3, \'conductor\', $4) RETURNING "id", "email", "nombre", "rol", "gestor_code"',
+      [emailLower, passwordHash, data.nombre.trim(), data.gestor_code?.trim() || null]
+    );
+
+    return result.rows[0];
+  }
+
+  async updateConductor(id: string, data: { email?: string; nombre?: string; gestor_code?: string }) {
+    if (data.email) {
+      const emailLower = data.email.trim().toLowerCase();
+      const emailCheck = await this.databaseService.query(
+        'SELECT id FROM "usuarios" WHERE "email" = $1 AND "id" != $2',
+        [emailLower, id]
+      );
+      if (emailCheck.rows.length > 0) {
+        throw new Error('El correo electrónico ya está registrado por otro usuario.');
+      }
+    }
+
+    const fields: string[] = [];
+    const values: any[] = [];
+    let placeholderIdx = 1;
+
+    if (data.nombre !== undefined) {
+      fields.push(`"nombre" = $${placeholderIdx++}`);
+      values.push(data.nombre.trim());
+    }
+    if (data.email !== undefined) {
+      fields.push(`"email" = $${placeholderIdx++}`);
+      values.push(data.email.trim().toLowerCase());
+    }
+    if (data.gestor_code !== undefined) {
+      fields.push(`"gestor_code" = $${placeholderIdx++}`);
+      values.push(data.gestor_code?.trim() || null);
+    }
+
+    if (fields.length === 0) {
+      throw new Error('No hay campos para actualizar.');
+    }
+
+    values.push(id);
+    const sql = `UPDATE "usuarios" SET ${fields.join(', ')} WHERE "id" = $${placeholderIdx} AND "rol" = 'conductor' RETURNING "id", "email", "nombre", "rol", "gestor_code"`;
+    const result = await this.databaseService.query(sql, values);
+
+    if (result.rows.length === 0) {
+      throw new Error('Conductor no encontrado o no tiene rol de conductor.');
+    }
+
+    return result.rows[0];
+  }
+
+  async deleteConductor(id: string) {
+    const result = await this.databaseService.query(
+      'DELETE FROM "usuarios" WHERE "id" = $1 AND "rol" = \'conductor\' RETURNING *',
+      [id]
+    );
+    if (result.rows.length === 0) {
+      throw new Error('Conductor no encontrado o no tiene rol de conductor.');
+    }
+    return { success: true, message: 'Conductor eliminado correctamente.' };
+  }
+
   async setDomicilioPasajero(pasajeroId: string, data: { direccion: string; latitud: number; longitud: number }) {
     const result = await this.databaseService.query(
       'UPDATE "usuarios" SET "direccion" = $1, "latitud" = $2, "longitud" = $3 WHERE "id" = $4 RETURNING "id", "direccion", "latitud", "longitud"',
