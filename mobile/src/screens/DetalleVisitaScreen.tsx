@@ -107,8 +107,13 @@ export default function DetalleViajeScreen({ route, navigation }: any) {
   };
 
   const handleNavigate = async () => {
-    const lat = viaje.latitud || 20.6736;
-    const lng = viaje.longitud || -103.3496;
+    // Obtenemos la última parada de la ruta para usarla como destino final
+    const ultimaParada = viaje.paradas && viaje.paradas.length > 0
+      ? viaje.paradas[viaje.paradas.length - 1]
+      : null;
+
+    const lat = ultimaParada ? ultimaParada.latitud : (viaje.latitud || 20.6736);
+    const lng = ultimaParada ? ultimaParada.longitud : (viaje.longitud || -103.3496);
     const wazeNativeUrl = `waze://ul?ll=${lat},${lng}&navigate=yes`;
     const googleMapsUrl = `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
 
