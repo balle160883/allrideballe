@@ -16,15 +16,23 @@ import { useAuth } from '../context/AuthContext';
 import { Parada } from '../hooks/useVisitas';
 
 interface Ruta {
-  ruta_id: number;
-  nombre: string;
+  ruta_id?: number;
+  id?: number;
+  nombre?: string;
+  ruta_nombre?: string;
   origen: string;
   destino: string;
   paradas: Parada[];
-  horarios: string[];
-  distancia_km: number;
-  tiempo_estimado_min: number;
-  estado: string;
+  horarios?: string[];
+  distancia_km?: number;
+  tiempo_estimado_min?: number;
+  estado?: string;
+  // Campos del viaje disponible
+  fecha_hora_salida?: string;
+  capacidad?: number;
+  ocupados?: number;
+  modelo?: string;
+  patente?: string;
 }
 
 export default function RutasDisponiblesScreen({ navigation }: any) {
@@ -32,10 +40,13 @@ export default function RutasDisponiblesScreen({ navigation }: any) {
   const [loading, setLoading] = useState(true);
   const { user } = useAuth();
 
+  const isPasajero = user?.rol === 'pasajero';
+
   const fetchRutas = async () => {
     try {
       setLoading(true);
-      const data = await api.get('/transporte/rutas');
+      const endpoint = isPasajero ? '/transporte/viajes/disponibles' : '/transporte/rutas';
+      const data = await api.get(endpoint);
       setRutas(data || []);
     } catch (e) {
       console.error('Error fetching rutas:', e);
@@ -58,87 +69,193 @@ export default function RutasDisponiblesScreen({ navigation }: any) {
     }
   };
 
-  const renderRutaItem = ({ item }: { item: Ruta }) => (
-    <View style={styles.rutaCard}>
-      <View style={styles.rutaHeader}>
-        <View style={styles.rutaIconContainer}>
-          <MaterialCommunityIcons name="route" size={28} color={Colors.primary} />
-        </View>
-        <View style={styles.rutaInfo}>
-          <Text style={styles.rutaNombre}>{item.nombre}</Text>
-          <View style={styles.rutaRecorrido}>
-            <MaterialCommunityIcons name="arrow-right-top" size={16} color={Colors.secondary} />
-            <Text style={styles.rutaTexto} numberOfLines={1}>{item.origen}</Text>
-          </View>
-          <View style={styles.rutaRecorrido}>
-            <MaterialCommunityIcons name="arrow-right-bottom" size={16} color={Colors.primary} />
-            <Text style={styles.rutaTexto} numberOfLines={1}>{item.destino}</Text>
-          </View>
-        </View>
-        <View style={[styles.estadoBadge, item.estado === 'activa' && styles.estadoActivo]}>
-          <Text style={[styles.estadoTexto, item.estado === 'activa' && styles.estadoActivoTexto]}>
-            {item.estado === 'activa' ? 'Activa' : 'Inactiva'}
-          </Text>
-        </View>
-      </View>
+  const formatDateTime = (dateStr: string) => {
+    try {
+      const d = new Date(dateStr);
+      return d.toLocaleDateString('es-MX', {
+        weekday: 'short',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    } catch {
+      return dateStr;
+    }
+  };
 
-      <View style={styles.rutaDetalles}>
-        <View style={styles.detalleItem}>
-          <MaterialCommunityIcons name="map-marker-distance" size={18} color={Colors.textMuted} />
-          <Text style={styles.detalleTexto}>{item.distancia_km.toFixed(1)} km</Text>
-        </View>
-        <View style={styles.detalleItem}>
-          <MaterialCommunityIcons name="clock-outline" size={18} color={Colors.textMuted} />
-          <Text style={styles.detalleTexto}>{item.tiempo_estimado_min} min</Text>
-        </View>
-        <View style={styles.detalleItem}>
-          <MaterialCommunityIcons name="bus-stop" size={18} color={Colors.textMuted} />
-          <Text style={styles.detalleTexto}>{item.paradas.length} paradas</Text>
-        </View>
-      </View>
+  const handleReservar = async (viajeId: number) => {
+    Alert.alert(
+      '🎟️ Reservar Asiento',
+      '¿Estás seguro que deseas solicitar un asiento para este viaje?',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Solicitar',
+          onPress: async () => {
+            try {
+              setLoading(true);
+              await api.post('/transporte/reservas/solicitar', { viaje_id: viajeId });
+              Alert.alert(
+                'Solicitud Enviada', 
+                'Tu reservación ha sido registrada. Está pendiente de aprobación por parte del gerente.'
+              );
+              fetchRutas();
+            } catch (err: any) {
+              Alert.alert('Error', err.message || 'No se pudo realizar la solicitud de reserva.');
+            } finally {
+              setLoading(false);
+            }
+          }
+        }
+      ]
+    );
+  };
 
-      {item.horarios && item.horarios.length > 0 && (
-        <View style={styles.horariosContainer}>
-          <Text style={styles.horariosTitulo}>Horarios:</Text>
-          <View style={styles.horariosList}>
-            {item.horarios.map((horario, index) => (
-              <View key={index} style={styles.horarioBadge}>
-                <MaterialCommunityIcons name="clock" size={14} color={Colors.primary} />
-                <Text style={styles.horarioTexto}>{formatTime(horario)}</Text>
-              </View>
-            ))}
+  const renderRutaItem = ({ item }: { item: Ruta }) => {
+    const nombre = item.ruta_nombre || item.nombre || 'Ruta sin nombre';
+    const totalParadas = item.paradas ? item.paradas.length : 0;
+    
+    // Calcular cupo si aplica
+    const tieneCupoInfo = item.capacidad !== undefined && item.ocupados !== undefined;
+    const libres = tieneCupoInfo ? (item.capacidad! - item.ocupados!) : 0;
+    const tieneLugares = libres > 0;
+
+    return (
+      <View style={styles.rutaCard}>
+        <View style={styles.rutaHeader}>
+          <View style={styles.rutaIconContainer}>
+            <MaterialCommunityIcons name="bus-side" size={28} color={Colors.primary} />
+          </View>
+          <View style={styles.rutaInfo}>
+            <Text style={styles.rutaNombre}>{nombre}</Text>
+            <View style={styles.rutaRecorrido}>
+              <MaterialCommunityIcons name="arrow-right-top" size={16} color={Colors.secondary} />
+              <Text style={styles.rutaTexto} numberOfLines={1}>{item.origen}</Text>
+            </View>
+            <View style={styles.rutaRecorrido}>
+              <MaterialCommunityIcons name="arrow-right-bottom" size={16} color={Colors.primary} />
+              <Text style={styles.rutaTexto} numberOfLines={1}>{item.destino}</Text>
+            </View>
+          </View>
+          
+          {!isPasajero && (
+            <View style={[styles.estadoBadge, item.estado === 'activa' && styles.estadoActivo]}>
+              <Text style={[styles.estadoTexto, item.estado === 'activa' && styles.estadoActivoTexto]}>
+                {item.estado === 'activa' ? 'Activa' : 'Inactiva'}
+              </Text>
+            </View>
+          )}
+
+          {isPasajero && tieneCupoInfo && (
+            <View style={[styles.estadoBadge, tieneLugares ? styles.estadoActivo : styles.estadoInactivo]}>
+              <Text style={[styles.estadoTexto, tieneLugares ? styles.estadoActivoTexto : styles.estadoInactivoTexto]}>
+                {libres} Libres
+              </Text>
+            </View>
+          )}
+        </View>
+
+        {/* Detalles del viaje/vehículo */}
+        <View style={styles.rutaDetalles}>
+          {item.distancia_km !== undefined && (
+            <View style={styles.detalleItem}>
+              <MaterialCommunityIcons name="map-marker-distance" size={18} color={Colors.textMuted} />
+              <Text style={styles.detalleTexto}>{item.distancia_km.toFixed(1)} km</Text>
+            </View>
+          )}
+          {item.tiempo_estimado_min !== undefined && (
+            <View style={styles.detalleItem}>
+              <MaterialCommunityIcons name="clock-outline" size={18} color={Colors.textMuted} />
+              <Text style={styles.detalleTexto}>{item.tiempo_estimado_min} min</Text>
+            </View>
+          )}
+          <View style={styles.detalleItem}>
+            <MaterialCommunityIcons name="bus-stop" size={18} color={Colors.textMuted} />
+            <Text style={styles.detalleTexto}>{totalParadas} paradas</Text>
           </View>
         </View>
-      )}
 
-      {item.paradas && item.paradas.length > 0 && (
-        <View style={styles.paradasContainer}>
-          <Text style={styles.paradasTitulo}>Paradas:</Text>
-          <View style={styles.paradasList}>
-            {item.paradas.slice(0, 5).map((parada) => (
-              <View key={parada.orden} style={styles.paradaItem}>
-                <View style={[styles.paradaOrden, parada.orden === 1 && styles.paradaOrdenPrimera]}>
-                  <Text style={[styles.paradaOrdenTexto, parada.orden === 1 && styles.paradaOrdenPrimeraTexto]}>
-                    {parada.orden}
-                  </Text>
+        {/* Mostrar fecha/hora de salida si es un viaje programado */}
+        {isPasajero && item.fecha_hora_salida && (
+          <View style={styles.horariosContainer}>
+            <Text style={styles.horariosTitulo}>Salida Programada:</Text>
+            <View style={styles.horarioBadge}>
+              <MaterialCommunityIcons name="calendar-clock" size={16} color={Colors.primary} />
+              <Text style={styles.horarioTexto}>{formatDateTime(item.fecha_hora_salida)}</Text>
+            </View>
+          </View>
+        )}
+
+        {/* Mostrar modelo y patente del bus */}
+        {isPasajero && item.modelo && (
+          <View style={styles.vehiculoContainer}>
+            <MaterialCommunityIcons name="bus" size={16} color={Colors.textMuted} />
+            <Text style={styles.vehiculoTexto}>{item.modelo} ({item.patente})</Text>
+          </View>
+        )}
+
+        {/* Horarios fijos si es vista normal */}
+        {!isPasajero && item.horarios && item.horarios.length > 0 && (
+          <View style={styles.horariosContainer}>
+            <Text style={styles.horariosTitulo}>Horarios:</Text>
+            <View style={styles.horariosList}>
+              {item.horarios.map((horario, index) => (
+                <View key={index} style={styles.horarioBadge}>
+                  <MaterialCommunityIcons name="clock" size={14} color={Colors.primary} />
+                  <Text style={styles.horarioTexto}>{formatTime(horario)}</Text>
                 </View>
-                <Text style={styles.paradaNombre} numberOfLines={1}>{parada.nombre}</Text>
-              </View>
-            ))}
-            {item.paradas.length > 5 && (
-              <Text style={styles.paradasExtra}>+ {item.paradas.length - 5} paradas más...</Text>
-            )}
+              ))}
+            </View>
           </View>
-        </View>
-      )}
-    </View>
-  );
+        )}
+
+        {/* Mostrar paradas */}
+        {item.paradas && item.paradas.length > 0 && (
+          <View style={styles.paradasContainer}>
+            <Text style={styles.paradasTitulo}>Paradas del Recorrido:</Text>
+            <View style={styles.paradasList}>
+              {item.paradas.slice(0, 4).map((parada) => (
+                <View key={parada.orden} style={styles.paradaItem}>
+                  <View style={[styles.paradaOrden, parada.orden === 1 && styles.paradaOrdenPrimera]}>
+                    <Text style={[styles.paradaOrdenTexto, parada.orden === 1 && styles.paradaOrdenPrimeraTexto]}>
+                      {parada.orden}
+                    </Text>
+                  </View>
+                  <Text style={styles.paradaNombre} numberOfLines={1}>{parada.nombre}</Text>
+                </View>
+              ))}
+              {item.paradas.length > 4 && (
+                <Text style={styles.paradasExtra}>+ {item.paradas.length - 4} paradas más...</Text>
+              )}
+            </View>
+          </View>
+        )}
+
+        {/* Botón de reserva para pasajeros */}
+        {isPasajero && (
+          <TouchableOpacity 
+            style={[styles.reservarButton, !tieneLugares && styles.reservarButtonDisabled]}
+            onPress={() => item.id && handleReservar(item.id)}
+            disabled={!tieneLugares}
+          >
+            <MaterialCommunityIcons name="bookmark-check" size={20} color="#fff" />
+            <Text style={styles.reservarButtonText}>
+              {tieneLugares ? 'Reservar Asiento' : 'Sin Asientos Disponibles'}
+            </Text>
+          </TouchableOpacity>
+        )}
+      </View>
+    );
+  };
 
   if (loading) {
     return (
       <View style={styles.center}>
         <ActivityIndicator size="large" color={Colors.primary} />
-        <Text style={styles.loadingText}>Cargando rutas disponibles...</Text>
+        <Text style={styles.loadingText}>
+          {isPasajero ? 'Cargando viajes disponibles...' : 'Cargando rutas disponibles...'}
+        </Text>
       </View>
     );
   }
@@ -147,12 +264,14 @@ export default function RutasDisponiblesScreen({ navigation }: any) {
     <View style={styles.container}>
       <View style={styles.header}>
         <MaterialCommunityIcons name="routes" size={32} color={Colors.primary} />
-        <Text style={styles.titulo}>Rutas Disponibles</Text>
+        <Text style={styles.titulo}>
+          {isPasajero ? 'Viajes Disponibles' : 'Rutas Disponibles'}
+        </Text>
       </View>
 
       <FlatList
         data={rutas}
-        keyExtractor={(item) => item.ruta_id.toString()}
+        keyExtractor={(item) => (item.id || item.ruta_id || Math.random()).toString()}
         renderItem={renderRutaItem}
         contentContainerStyle={styles.list}
         refreshControl={
@@ -161,8 +280,14 @@ export default function RutasDisponiblesScreen({ navigation }: any) {
         ListEmptyComponent={
           <View style={styles.emptyState}>
             <MaterialCommunityIcons name="routes" size={64} color={Colors.border} />
-            <Text style={styles.emptyTitle}>Sin rutas disponibles</Text>
-            <Text style={styles.emptySubtitle}>No hay rutas registradas en el sistema.</Text>
+            <Text style={styles.emptyTitle}>
+              {isPasajero ? 'Sin viajes disponibles' : 'Sin rutas disponibles'}
+            </Text>
+            <Text style={styles.emptySubtitle}>
+              {isPasajero 
+                ? 'No hay viajes programados disponibles para reservar en este momento.' 
+                : 'No hay rutas registradas en el sistema.'}
+            </Text>
           </View>
         }
       />
@@ -260,6 +385,9 @@ const styles = StyleSheet.create({
   estadoActivo: {
     backgroundColor: Colors.success + '20',
   },
+  estadoInactivo: {
+    backgroundColor: '#fef2f2',
+  },
   estadoTexto: {
     fontSize: 12,
     fontWeight: '800',
@@ -267,6 +395,9 @@ const styles = StyleSheet.create({
   },
   estadoActivoTexto: {
     color: Colors.success,
+  },
+  estadoInactivoTexto: {
+    color: '#ef4444',
   },
   rutaDetalles: {
     flexDirection: 'row',
@@ -310,11 +441,23 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 12,
+    alignSelf: 'flex-start',
   },
   horarioTexto: {
     fontSize: 13,
     fontWeight: '700',
     color: Colors.primary,
+  },
+  vehiculoContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 8,
+  },
+  vehiculoTexto: {
+    fontSize: 13,
+    color: Colors.textMuted,
+    fontWeight: '600',
   },
   paradasContainer: {
     marginTop: Spacing.sm,
@@ -382,5 +525,23 @@ const styles = StyleSheet.create({
     color: Colors.textMuted,
     textAlign: 'center',
     paddingHorizontal: 32,
+  },
+  reservarButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: Colors.primary,
+    paddingVertical: 12,
+    borderRadius: 12,
+    marginTop: 16,
+  },
+  reservarButtonDisabled: {
+    backgroundColor: Colors.border,
+  },
+  reservarButtonText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: 'bold',
   },
 });

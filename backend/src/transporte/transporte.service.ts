@@ -11,8 +11,19 @@ export class TransporteService {
   // ==========================================
   // RUTAS
   // ==========================================
-  async getRutas() {
-    const result = await this.databaseService.query('SELECT * FROM "rutas" ORDER BY "id" ASC');
+  async getRutas(userId?: string) {
+    let sql = 'SELECT * FROM "rutas"';
+    const params: any[] = [];
+    if (userId) {
+      const userRes = await this.databaseService.query('SELECT rol, sede_id FROM "usuarios" WHERE id = $1', [userId]);
+      const user = userRes.rows[0];
+      if (user && user.sede_id) {
+        sql += ' WHERE "sede_id" = $1 OR "sede_id" IS NULL';
+        params.push(user.sede_id);
+      }
+    }
+    sql += ' ORDER BY "id" ASC';
+    const result = await this.databaseService.query(sql, params);
     return result.rows;
   }
 
@@ -40,8 +51,19 @@ export class TransporteService {
   // ==========================================
   // VEHÍCULOS
   // ==========================================
-  async getVehiculos() {
-    const result = await this.databaseService.query('SELECT * FROM "vehiculos" ORDER BY "id" ASC');
+  async getVehiculos(userId?: string) {
+    let sql = 'SELECT * FROM "vehiculos"';
+    const params: any[] = [];
+    if (userId) {
+      const userRes = await this.databaseService.query('SELECT rol, proveedor_id FROM "usuarios" WHERE id = $1', [userId]);
+      const user = userRes.rows[0];
+      if (user && user.rol === 'admin_proveedor' && user.proveedor_id) {
+        sql += ' WHERE "proveedor_id" = $1';
+        params.push(user.proveedor_id);
+      }
+    }
+    sql += ' ORDER BY "id" ASC';
+    const result = await this.databaseService.query(sql, params);
     return result.rows;
   }
 
@@ -125,7 +147,7 @@ export class TransporteService {
   // ==========================================
   // VIAJES (SERVICIOS PROGRAMADOS)
   // ==========================================
-  async getViajes(conductorId?: string) {
+  async getViajes(conductorId?: string, userId?: string) {
     let query = `
       SELECT v.*, r.nombre as ruta_nombre, r.origen, r.destino, r.paradas,
              ve.patente, ve.modelo, ve.capacidad, u.nombre as conductor_nombre
@@ -135,10 +157,31 @@ export class TransporteService {
       LEFT JOIN "usuarios" u ON v.conductor_id = u.id
     `;
     const params: any[] = [];
+    let conditions: string[] = [];
+
     if (conductorId) {
-      query += ' WHERE v.conductor_id = $1';
+      conditions.push('v.conductor_id = $' + (params.length + 1));
       params.push(conductorId);
     }
+
+    if (userId) {
+      const userRes = await this.databaseService.query('SELECT rol, proveedor_id, sede_id FROM "usuarios" WHERE id = $1', [userId]);
+      const user = userRes.rows[0];
+      if (user) {
+        if (user.rol === 'admin_proveedor' && user.proveedor_id) {
+          conditions.push('v.proveedor_id = $' + (params.length + 1));
+          params.push(user.proveedor_id);
+        } else if (user.rol === 'pasajero' && user.sede_id) {
+          conditions.push('v.sede_id = $' + (params.length + 1));
+          params.push(user.sede_id);
+        }
+      }
+    }
+
+    if (conditions.length > 0) {
+      query += ' WHERE ' + conditions.join(' AND ');
+    }
+
     query += ' ORDER BY v.fecha_hora_salida DESC';
     const result = await this.databaseService.query(query, params);
     return result.rows;
@@ -336,7 +379,109 @@ export class TransporteService {
       'INSERT INTO "ubicaciones_flota" ("viaje_id", "latitud", "longitud", "velocidad") VALUES ($1, $2, $3, $4) RETURNING *',
       [data.viaje_id, data.latitud, data.longitud, data.velocidad || 0]
     );
+
+    // Procesamiento en segundo plano para no demorar la respuesta de la petición API
+    this.processGeofencing(data.viaje_id, Number(data.latitud), Number(data.longitud)).catch(err => {
+      this.logger.error(`Error al procesar geofencing del viaje ${data.viaje_id}: ${err.message}`);
+    });
+
     return result.rows[0];
+  }
+
+  private async processGeofencing(viajeId: number, currentLat: number, currentLng: number) {
+    const routeRes = await this.databaseService.query(
+      `SELECT r.paradas, v.ruta_id
+       FROM viajes v 
+       JOIN rutas r ON v.ruta_id = r.id 
+       WHERE v.id = $1`,
+      [viajeId]
+    );
+
+    if (routeRes.rows.length === 0) return;
+    const paradas = routeRes.rows[0].paradas;
+    if (!Array.isArray(paradas)) return;
+
+    const calculateDistanceKm = (lat1: number, lon1: number, lat2: number, lon2: number) => {
+      const R = 6371; // Radio en km
+      const dLat = (lat2 - lat1) * Math.PI / 180;
+      const dLon = (lon2 - lon1) * Math.PI / 180;
+      const a = 
+        Math.sin(dLat/2) * Math.sin(dLat/2) +
+        Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+        Math.sin(dLon/2) * Math.sin(dLon/2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+      return R * c;
+    };
+
+    for (const parada of paradas) {
+      const pLat = Number(parada.latitud);
+      const pLng = Number(parada.longitud);
+      const dist = calculateDistanceKm(currentLat, currentLng, pLat, pLng);
+      const orden = Number(parada.orden);
+
+      if (dist <= 0.1) { // 100 metros
+        // Validar si ya se registró la llegada
+        const checkArrival = await this.databaseService.query(
+          'SELECT id FROM "tiempos_paradas" WHERE "viaje_id" = $1 AND "orden" = $2',
+          [viajeId, orden]
+        );
+
+        if (checkArrival.rows.length === 0) {
+          // Registrar arribo real
+          await this.databaseService.query(
+            `INSERT INTO "tiempos_paradas" ("viaje_id", "parada_nombre", "orden", "fecha_hora_llegada") 
+             VALUES ($1, $2, $3, CURRENT_TIMESTAMP)`,
+            [viajeId, parada.nombre, orden]
+          );
+          this.logger.log(`[Geofencing] Autobús ingresó a la parada "${parada.nombre}" del viaje #${viajeId}`);
+
+          // Notificar de manera inteligente a los pasajeros de la siguiente parada
+          await this.notifyApproachingPassengers(viajeId, parada.nombre, orden);
+        }
+      } else if (dist > 0.25) { // 250 metros
+        // Si ya ingresó pero no ha marcado salida, registrar la salida real
+        await this.databaseService.query(
+          `UPDATE "tiempos_paradas" 
+           SET "fecha_hora_salida" = CURRENT_TIMESTAMP 
+           WHERE "viaje_id" = $1 AND "orden" = $2 AND "fecha_hora_salida" IS NULL`,
+          [viajeId, orden]
+        );
+      }
+    }
+  }
+
+  private async notifyApproachingPassengers(viajeId: number, paradaActualNombre: string, ordenParadaActual: number) {
+    try {
+      const routeRes = await this.databaseService.query(
+        `SELECT r.paradas, r.nombre as ruta_nombre FROM viajes v JOIN rutas r ON v.ruta_id = r.id WHERE v.id = $1`,
+        [viajeId]
+      );
+      if (routeRes.rows.length === 0) return;
+      const { paradas, ruta_nombre } = routeRes.rows[0];
+      if (!Array.isArray(paradas)) return;
+
+      // Buscar si existe la siguiente parada
+      const nextParada = paradas.find(p => p.orden === ordenParadaActual + 1);
+      if (!nextParada) return; // Parada final, no hay siguiente
+
+      // Buscar pasajeros que tengan reservación para este viaje
+      const passengers = await this.databaseService.query(
+        `SELECT u.id, u.nombre, u.email 
+         FROM reservas r
+         JOIN usuarios u ON r.pasajero_id = u.id
+         WHERE r.viaje_id = $1 AND r.estado = 'reservado'`,
+        [viajeId]
+      );
+
+      for (const p of passengers.rows) {
+        this.logger.log(
+          `[Notificación de Proximidad] Enviando alerta a ${p.nombre} (${p.email}): El autobús de la ruta "${ruta_nombre}" cruzó "${paradaActualNombre}" y está próximo a su parada "${nextParada.nombre}".`
+        );
+        // Simulación de envío: Aquí se llamaría a un servicio Push (como Firebase) o SMS / WhatsApp API
+      }
+    } catch (e: any) {
+      this.logger.error(`Error al enviar notificaciones de proximidad: ${e.message}`);
+    }
   }
 
   async getLatestLocations() {
@@ -357,22 +502,42 @@ export class TransporteService {
   // ==========================================
   // ALERTAS DE VIAJE
   // ==========================================
-  async getAlertas() {
-    const result = await this.databaseService.query(`
+  async getAlertas(userId?: string) {
+    let sql = `
       SELECT a.*, r.nombre as ruta_nombre, ve.patente
       FROM "alertas_viaje" a
       LEFT JOIN "viajes" v ON a.viaje_id = v.id
       LEFT JOIN "rutas" r ON v.ruta_id = r.id
       LEFT JOIN "vehiculos" ve ON v.vehiculo_id = ve.id
-      ORDER BY a.timestamp DESC
-    `);
+    `;
+    const params: any[] = [];
+    if (userId) {
+      const userRes = await this.databaseService.query('SELECT rol, proveedor_id, sede_id FROM "usuarios" WHERE id = $1', [userId]);
+      const user = userRes.rows[0];
+      if (user) {
+        let conditions: string[] = [];
+        if (user.rol === 'admin_proveedor' && user.proveedor_id) {
+          conditions.push('v.proveedor_id = $1');
+          params.push(user.proveedor_id);
+        } else if (user.rol === 'pasajero' && user.sede_id) {
+          conditions.push('v.sede_id = $1');
+          params.push(user.sede_id);
+        }
+        if (conditions.length > 0) {
+          sql += ' WHERE ' + conditions.join(' AND ');
+        }
+      }
+    }
+    sql += ' ORDER BY a.timestamp DESC';
+    const result = await this.databaseService.query(sql, params);
     return result.rows;
   }
 
-  async createAlerta(data: { viaje_id: number; tipo: string; descripcion: string }) {
+  async createAlerta(data: { viaje_id?: number | null; tipo: string; descripcion: string; latitud?: number; longitud?: number; prioridad?: string }) {
+    const prioridad = data.prioridad || ((data.tipo === 'sos' || data.tipo === 'acoso') ? 'alta' : 'media');
     const result = await this.databaseService.query(
-      'INSERT INTO "alertas_viaje" ("viaje_id", "tipo", "descripcion") VALUES ($1, $2, $3) RETURNING *',
-      [data.viaje_id, data.tipo, data.descripcion]
+      'INSERT INTO "alertas_viaje" ("viaje_id", "tipo", "descripcion", "latitud", "longitud", "prioridad") VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
+      [data.viaje_id || null, data.tipo, data.descripcion, data.latitud || null, data.longitud || null, prioridad]
     );
     return result.rows[0];
   }
@@ -419,7 +584,15 @@ export class TransporteService {
     }
 
     if (reserva.estado === 'confirmado' || reserva.estado === 'abordado') {
-      throw new BadRequestException(`El pasajero ${passenger.nombre} ya abordó previamente.`);
+      return {
+        success: true,
+        reserva: {
+          ...reserva,
+          pasajero_nombre: passenger.nombre,
+          pasajero_email: passenger.email,
+          identificador_tarjeta: passenger.identificador_tarjeta,
+        },
+      };
     }
 
     if (reserva.estado === 'cancelado') {
@@ -1020,6 +1193,116 @@ export class TransporteService {
 
     const res = await this.databaseService.query(sql, params);
     return res.rows;
+  }
+
+  async getAuditoriaSLA() {
+    const sql = `
+      SELECT 
+        tp.id as tiempo_parada_id,
+        tp.viaje_id,
+        tp.parada_nombre,
+        tp.orden,
+        tp.fecha_hora_llegada,
+        tp.fecha_hora_salida as fecha_hora_salida_real,
+        v.fecha_hora_salida as viaje_fecha_hora_salida,
+        v.proveedor_id,
+        prov.nombre as proveedor_nombre,
+        r.nombre as ruta_nombre,
+        r.paradas
+      FROM "tiempos_paradas" tp
+      JOIN "viajes" v ON tp.viaje_id = v.id
+      JOIN "rutas" r ON v.ruta_id = r.id
+      LEFT JOIN "proveedores" prov ON v.proveedor_id = prov.id
+      ORDER BY tp.fecha_hora_llegada DESC
+    `;
+    const res = await this.databaseService.query(sql);
+
+    const detalles = res.rows.map((row: any) => {
+      const paradasList = Array.isArray(row.paradas) ? row.paradas : [];
+      // Buscar la parada en la ruta para ver si tiene offset de tiempo
+      const paradaRuta = paradasList.find((p: any) => Number(p.orden) === Number(row.orden) || p.nombre === row.parada_nombre);
+      
+      // Offset estimado en minutos (si la parada no tiene, asumimos 15 minutos por parada)
+      let offsetMinutos = 0;
+      if (paradaRuta && paradaRuta.minutos_desde_inicio !== undefined) {
+        offsetMinutos = Number(paradaRuta.minutos_desde_inicio);
+      } else {
+        // Fallback: 15 minutos por cada parada adicional en la ruta
+        offsetMinutos = (Number(row.orden) - 1) * 15;
+      }
+
+      const scheduledArrival = new Date(new Date(row.viaje_fecha_hora_salida).getTime() + offsetMinutos * 60 * 1000);
+      const actualArrival = new Date(row.fecha_hora_llegada);
+      
+      // Desviación en minutos
+      const desviacionMinutos = Math.round((actualArrival.getTime() - scheduledArrival.getTime()) / (60 * 1000));
+      
+      // SLA de puntualidad: ±10 minutos tolerables
+      let estadoPuntualidad = 'A tiempo';
+      let cumpleSLA = true;
+      if (desviacionMinutos > 10) {
+        estadoPuntualidad = 'Retrasado';
+        cumpleSLA = false;
+      } else if (desviacionMinutos < -10) {
+        estadoPuntualidad = 'Adelantado';
+        cumpleSLA = false;
+      }
+
+      return {
+        tiempoParadaId: row.tiempo_parada_id,
+        viajeId: row.viaje_id,
+        rutaNombre: row.ruta_nombre,
+        proveedorNombre: row.proveedor_nombre || 'Sin Proveedor Asignado',
+        paradaNombre: row.parada_nombre,
+        orden: row.orden,
+        programado: scheduledArrival.toISOString(),
+        real: actualArrival.toISOString(),
+        desviacion: desviacionMinutos,
+        estado: estadoPuntualidad,
+        cumpleSLA
+      };
+    });
+
+    // Calcular KPIs generales
+    const totalParadas = detalles.length;
+    const paradasATiempo = detalles.filter(d => d.cumpleSLA).length;
+    const porcentajeSLA = totalParadas > 0 ? Math.round((paradasATiempo * 100) / totalParadas) : 100;
+
+    // Agrupar por proveedor
+    const resumenProveedores: { [key: string]: { total: number; aTiempo: number; desviacionAcumulada: number } } = {};
+    
+    detalles.forEach(d => {
+      const pNombre = d.proveedorNombre;
+      if (!resumenProveedores[pNombre]) {
+        resumenProveedores[pNombre] = { total: 0, aTiempo: 0, desviacionAcumulada: 0 };
+      }
+      resumenProveedores[pNombre].total++;
+      if (d.cumpleSLA) {
+        resumenProveedores[pNombre].aTiempo++;
+      }
+      resumenProveedores[pNombre].desviacionAcumulada += d.desviacion;
+    });
+
+    const proveedoresStats = Object.keys(resumenProveedores).map(pNombre => {
+      const stats = resumenProveedores[pNombre];
+      return {
+        proveedorNombre: pNombre,
+        totalVisitas: stats.total,
+        visitasATiempo: stats.aTiempo,
+        porcentajeSLA: Math.round((stats.aTiempo * 100) / stats.total),
+        desviacionPromedioMinutos: Math.round(stats.desviacionAcumulada / stats.total)
+      };
+    });
+
+    return {
+      kpis: {
+        totalParadas,
+        paradasATiempo,
+        porcentajeSLA
+      },
+      proveedores: proveedoresStats,
+      detalles
+    };
   }
 
   async importarDatosExcel(datos: any) {

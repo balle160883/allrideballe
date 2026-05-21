@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   StyleSheet, 
   View, 
@@ -14,6 +14,8 @@ import { Colors, Spacing } from '../constants/theme';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { api } from '../api/backend';
 import { CameraView, useCameraPermissions } from 'expo-camera';
+import NetInfo from '@react-native-community/netinfo';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function RegistroVisitaScreen({ route, navigation }: any) {
   const { visita, onScanSuccess } = route.params;
@@ -28,12 +30,95 @@ export default function RegistroVisitaScreen({ route, navigation }: any) {
 
   const viajeId = visita.viaje_id || visita.id;
 
+  // Lógica de sincronización offline al recuperar conexión
+  useEffect(() => {
+    const unsubscribe = NetInfo.addEventListener(state => {
+      if (state.isConnected) {
+        syncOfflineAbordajes();
+      }
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  const syncOfflineAbordajes = async () => {
+    try {
+      const stored = await AsyncStorage.getItem('@offline_abordajes');
+      if (!stored) return;
+
+      const queue = JSON.parse(stored);
+      if (queue.length === 0) return;
+
+      console.log(`[Offline Sync] Sincronizando ${queue.length} abordajes pendientes...`);
+      const remaining: any[] = [];
+      let successCount = 0;
+
+      for (const item of queue) {
+        try {
+          await api.post(`/transporte/viajes/${item.viajeId}/abordar`, {
+            identificador_tarjeta: item.identificador_tarjeta
+          });
+          successCount++;
+        } catch (e: any) {
+          // Si el backend indica que ya está abordado (o es idempotente), lo removemos
+          if (e.message && (e.message.includes('ya abordó') || e.message.includes('previamente') || e.message.includes('confirmado'))) {
+            successCount++;
+          } else {
+            remaining.push(item);
+          }
+        }
+      }
+
+      await AsyncStorage.setItem('@offline_abordajes', JSON.stringify(remaining));
+
+      if (successCount > 0) {
+        Alert.alert(
+          '📶 Sincronización Exitosa',
+          `Se han sincronizado con éxito ${successCount} abordajes guardados localmente.`
+        );
+        if (onScanSuccess) onScanSuccess();
+      }
+    } catch (err) {
+      console.error('Error al sincronizar abordajes offline:', err);
+    }
+  };
+
   const validateCardDirect = async (scannedCardId: string) => {
     if (!scannedCardId.trim()) return;
 
     setLoading(true);
     try {
-      // Registrar abordaje por RFID / ID tarjeta / QR
+      const state = await NetInfo.fetch();
+      
+      if (!state.isConnected) {
+        // Modo Offline: Guardar localmente
+        const stored = await AsyncStorage.getItem('@offline_abordajes');
+        const queue = stored ? JSON.parse(stored) : [];
+        
+        const exists = queue.some(
+          (item: any) => item.viajeId === viajeId && item.identificador_tarjeta === scannedCardId.trim()
+        );
+        
+        if (!exists) {
+          queue.push({
+            viajeId,
+            identificador_tarjeta: scannedCardId.trim(),
+            timestamp: new Date().toISOString()
+          });
+          await AsyncStorage.setItem('@offline_abordajes', JSON.stringify(queue));
+        }
+
+        Alert.alert(
+          '🎟️ Abordaje Local Guardado',
+          'Sin conexión a internet. El boleto fue validado y guardado de manera local. Se sincronizará automáticamente al recuperar la señal.'
+        );
+        setCardId('');
+        if (onScanSuccess) onScanSuccess();
+        navigation.goBack();
+        return;
+      }
+
+      // Proceso normal online
       const response = await api.post(`/transporte/viajes/${viajeId}/abordar`, {
         identificador_tarjeta: scannedCardId.trim()
       });

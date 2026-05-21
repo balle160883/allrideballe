@@ -12,8 +12,8 @@ export class TransporteController {
   // RUTAS
   // ==========================================
   @Get('rutas')
-  async getRutas() {
-    return this.transporteService.getRutas();
+  async getRutas(@Request() req: any) {
+    return this.transporteService.getRutas(req.user.userId);
   }
 
   @Post('rutas')
@@ -35,8 +35,8 @@ export class TransporteController {
   // VEHÍCULOS
   // ==========================================
   @Get('vehiculos')
-  async getVehiculos() {
-    return this.transporteService.getVehiculos();
+  async getVehiculos(@Request() req: any) {
+    return this.transporteService.getVehiculos(req.user.userId);
   }
 
   @Post('vehiculos')
@@ -132,7 +132,7 @@ export class TransporteController {
   async getViajes(@Request() req: any) {
     // Si es un conductor, solo cargamos los viajes asignados a él
     const conductorId = req.user.rol === 'conductor' ? req.user.userId : undefined;
-    return this.transporteService.getViajes(conductorId);
+    return this.transporteService.getViajes(conductorId, req.user.userId);
   }
 
   @Post('viajes')
@@ -238,8 +238,8 @@ export class TransporteController {
   // ALERTAS
   // ==========================================
   @Get('alertas')
-  async getAlertas() {
-    return this.transporteService.getAlertas();
+  async getAlertas(@Request() req: any) {
+    return this.transporteService.getAlertas(req.user.userId);
   }
 
   @Post('alertas')
@@ -293,5 +293,10 @@ export class TransporteController {
       fechaInicio,
       fechaFin
     });
+  }
+
+  @Get('reportes/sla')
+  async getAuditoriaSLA() {
+    return this.transporteService.getAuditoriaSLA();
   }
 }

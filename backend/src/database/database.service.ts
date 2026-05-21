@@ -75,8 +75,56 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
         ALTER TABLE "usuarios" ADD COLUMN IF NOT EXISTS "direccion" VARCHAR(500);
         ALTER TABLE "usuarios" ADD COLUMN IF NOT EXISTS "latitud" NUMERIC(10, 8);
         ALTER TABLE "usuarios" ADD COLUMN IF NOT EXISTS "longitud" NUMERIC(11, 8);
+
+        -- Tabla para auditorías de parada (Geofencing)
+        CREATE TABLE IF NOT EXISTS "tiempos_paradas" (
+          "id" SERIAL PRIMARY KEY,
+          "viaje_id" INTEGER REFERENCES "viajes"("id") ON DELETE CASCADE,
+          "parada_nombre" VARCHAR(255) NOT NULL,
+          "orden" INTEGER NOT NULL,
+          "fecha_hora_llegada" TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          "fecha_hora_salida" TIMESTAMP,
+          UNIQUE("viaje_id", "orden")
+        );
+
+        -- Soporte para alertas SOS y reporte de acoso
+        ALTER TABLE "alertas_viaje" DROP CONSTRAINT IF EXISTS "alertas_viaje_tipo_check";
+        ALTER TABLE "alertas_viaje" ADD CONSTRAINT "alertas_viaje_tipo_check" CHECK ("tipo" IN ('desvio_ruta', 'atraso_proyectado', 'inicio_tardio', 'no_abordado', 'sos', 'acoso'));
+        ALTER TABLE "alertas_viaje" ADD COLUMN IF NOT EXISTS "latitud" NUMERIC(10, 8);
+        ALTER TABLE "alertas_viaje" ADD COLUMN IF NOT EXISTS "longitud" NUMERIC(11, 8);
+        ALTER TABLE "alertas_viaje" ADD COLUMN IF NOT EXISTS "prioridad" VARCHAR(50) DEFAULT 'media';
+
+        -- Tablas para Multi-Proveedor y Multi-Sede
+        CREATE TABLE IF NOT EXISTS "proveedores" (
+          "id" SERIAL PRIMARY KEY,
+          "nombre" VARCHAR(255) NOT NULL UNIQUE,
+          "created_at" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS "sedes" (
+          "id" SERIAL PRIMARY KEY,
+          "nombre" VARCHAR(255) NOT NULL UNIQUE,
+          "created_at" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        -- Poblar catálogos iniciales
+        INSERT INTO "proveedores" ("nombre") VALUES ('Transportes del Valle') ON CONFLICT DO NOTHING;
+        INSERT INTO "proveedores" ("nombre") VALUES ('Autobuses de Occidente') ON CONFLICT DO NOTHING;
+        INSERT INTO "sedes" ("nombre") VALUES ('Planta Industrial Norte') ON CONFLICT DO NOTHING;
+        INSERT INTO "sedes" ("nombre") VALUES ('Campus Tecnológico Sur') ON CONFLICT DO NOTHING;
+
+        -- Agregar llaves foráneas a usuarios, vehículos, rutas y viajes
+        ALTER TABLE "usuarios" ADD COLUMN IF NOT EXISTS "proveedor_id" INTEGER REFERENCES "proveedores"("id") ON DELETE SET NULL;
+        ALTER TABLE "usuarios" ADD COLUMN IF NOT EXISTS "sede_id" INTEGER REFERENCES "sedes"("id") ON DELETE SET NULL;
+
+        ALTER TABLE "vehiculos" ADD COLUMN IF NOT EXISTS "proveedor_id" INTEGER REFERENCES "proveedores"("id") ON DELETE SET NULL;
+
+        ALTER TABLE "rutas" ADD COLUMN IF NOT EXISTS "sede_id" INTEGER REFERENCES "sedes"("id") ON DELETE SET NULL;
+
+        ALTER TABLE "viajes" ADD COLUMN IF NOT EXISTS "proveedor_id" INTEGER REFERENCES "proveedores"("id") ON DELETE SET NULL;
+        ALTER TABLE "viajes" ADD COLUMN IF NOT EXISTS "sede_id" INTEGER REFERENCES "sedes"("id") ON DELETE SET NULL;
       `);
-      this.logger.log('Esquema de base de datos actualizado para el flujo de aprobación gerencial y smart routing.');
+      this.logger.log('Esquema de base de datos actualizado para todas las mejoras sugeridas (Geofencing, SOS, Multi-Proveedor/Sede).');
     } catch (error) {
       this.initError = error.message;
       this.logger.error('Error al conectar con PostgreSQL:', error.message);

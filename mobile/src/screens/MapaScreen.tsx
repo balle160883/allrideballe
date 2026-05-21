@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, Alert, Linking, ActivityIndicator, ScrollView } from 'react-native';
+import { StyleSheet, View, Text, TouchableOpacity, Alert, Linking, ActivityIndicator, ScrollView, Modal } from 'react-native';
 import { Colors, Spacing } from '../constants/theme';
 import Mapbox from '@rnmapbox/maps';
 import { useViajes, Viaje, Parada } from '../hooks/useVisitas';
@@ -7,6 +7,7 @@ import { useDirections } from '../hooks/useDirections';
 import * as Location from 'expo-location';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
+import { api } from '../api/backend';
 
 const MAPBOX_ACCESS_TOKEN = 'pk.eyJ1IjoiZGpiYjE2MDg4MyIsImEiOiJjbW4zY2o0dTUwOGdxMnFvYmJwZ2xzbnUwIn0.Yv7408j9tAieaX-YB-vAwg';
 Mapbox.setAccessToken(MAPBOX_ACCESS_TOKEN);
@@ -19,6 +20,93 @@ export default function MapaScreen({ navigation }: any) {
   const [selectedViaje, setSelectedViaje] = useState<Viaje | null>(null);
   const [selectedParada, setSelectedParada] = useState<Parada | null>(null);
   const cameraRef = useRef<Mapbox.Camera>(null);
+
+  // SOS Emergency States
+  const [sosModalVisible, setSosModalVisible] = useState(false);
+  const [sosType, setSosType] = useState<'sos' | 'acoso' | null>(null);
+  const [countdown, setCountdown] = useState(3);
+  const countdownIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (countdownIntervalRef.current) {
+        clearInterval(countdownIntervalRef.current);
+      }
+    };
+  }, []);
+
+  const startSosCountdown = (type: 'sos' | 'acoso') => {
+    setSosType(type);
+    setCountdown(3);
+    
+    if (countdownIntervalRef.current) {
+      clearInterval(countdownIntervalRef.current);
+    }
+
+    countdownIntervalRef.current = setInterval(() => {
+      setCountdown((prev) => {
+        if (prev <= 1) {
+          if (countdownIntervalRef.current) {
+            clearInterval(countdownIntervalRef.current);
+            countdownIntervalRef.current = null;
+          }
+          triggerEmergencyReport(type);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  };
+
+  const cancelSos = () => {
+    if (countdownIntervalRef.current) {
+      clearInterval(countdownIntervalRef.current);
+      countdownIntervalRef.current = null;
+    }
+    setSosType(null);
+    setCountdown(3);
+  };
+
+  const triggerEmergencyReport = async (type: 'sos' | 'acoso') => {
+    try {
+      let lat = userLocation ? userLocation[1] : 20.6736;
+      let lng = userLocation ? userLocation[0] : -103.3496;
+      
+      try {
+        const freshLoc = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.Balanced,
+        });
+        lat = freshLoc.coords.latitude;
+        lng = freshLoc.coords.longitude;
+      } catch (err) {
+        console.log('Error getting fresh location, using userLocation state:', err);
+      }
+
+      const activeTripId = selectedViaje?.id || viajeActivo?.id || null;
+
+      await api.post('/transporte/alertas', {
+        viaje_id: activeTripId,
+        tipo: type,
+        descripcion: type === 'sos' 
+          ? `🔴 ALERTA DE EMERGENCIA (SOS) iniciada por el ${isConductor ? 'conductor' : 'pasajero'}.`
+          : `⚠️ REPORTAR ACOSO/HOSTIGAMIENTO por el ${isConductor ? 'conductor' : 'pasajero'}.`,
+        latitud: lat,
+        longitud: lng,
+        prioridad: 'alta',
+      });
+
+      Alert.alert(
+        type === 'sos' ? '🚨 Alerta SOS Enviada' : '⚠️ Alerta de Acoso Enviada',
+        'La central de emergencias ha recibido tu ubicación y reporte. Mantén la calma, la ayuda está en camino.'
+      );
+    } catch (error: any) {
+      console.error('Error reporting emergency:', error);
+      Alert.alert('Error', 'No se pudo enviar la alerta. Por favor, intenta de nuevo o llama al número de emergencias.');
+    } finally {
+      setSosModalVisible(false);
+      setSosType(null);
+    }
+  };
 
   const isConductor = user?.rol === 'conductor';
   const viajesActivos = viajes.filter(v => v.viaje_estado === 'en_ruta' || v.viaje_estado === 'programado');
@@ -289,6 +377,88 @@ export default function MapaScreen({ navigation }: any) {
             <Text style={styles.legendText}>{viajes.length} viajes registrados</Text>
          </View>
       )}
+
+      {/* Botón Flotante de SOS/Emergencia */}
+      <TouchableOpacity 
+        style={[styles.sosButton, { bottom: selectedParada ? 280 : 160 }]} 
+        onPress={() => setSosModalVisible(true)}
+      >
+        <MaterialCommunityIcons name="alert-decagram" size={32} color="#fff" />
+        <Text style={styles.sosButtonText}>SOS</Text>
+      </TouchableOpacity>
+
+      {/* Modal de Emergencia y Reporte de Acoso */}
+      <Modal
+        visible={sosModalVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={cancelSos}
+      >
+        <View style={styles.modalOverlay}>
+          {sosType === null ? (
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <MaterialCommunityIcons name="shield-alert" size={48} color={Colors.error} />
+                <Text style={styles.modalTitle}>Centro de Seguridad</Text>
+                <Text style={styles.modalSubtitle}>¿Qué tipo de situación deseas reportar?</Text>
+              </View>
+
+              <TouchableOpacity 
+                style={[styles.emergencyOption, styles.sosOption]} 
+                onPress={() => startSosCountdown('sos')}
+              >
+                <MaterialCommunityIcons name="alert-octagon" size={32} color="#fff" />
+                <View style={styles.optionTextContainer}>
+                  <Text style={styles.optionTitle}>EMERGENCIA SOS</Text>
+                  <Text style={styles.optionSubtitle}>Accidente, problema médico o amenaza directa</Text>
+                </View>
+              </TouchableOpacity>
+
+              <TouchableOpacity 
+                style={[styles.emergencyOption, styles.acosoOption]} 
+                onPress={() => startSosCountdown('acoso')}
+              >
+                <MaterialCommunityIcons name="hand-back-right" size={32} color="#fff" />
+                <View style={styles.optionTextContainer}>
+                  <Text style={styles.optionTitle}>REPORTAR ACOSO</Text>
+                  <Text style={styles.optionSubtitle}>Hostigamiento, acoso o violencia verbal/física</Text>
+                </View>
+              </TouchableOpacity>
+
+              <TouchableOpacity 
+                style={styles.closeModalButton} 
+                onPress={() => setSosModalVisible(false)}
+              >
+                <Text style={styles.closeModalButtonText}>Cancelar</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <View style={styles.countdownContent}>
+              <View style={styles.countdownBadge}>
+                <Text style={styles.countdownNumber}>{countdown}</Text>
+              </View>
+              <Text style={styles.countdownTitle}>ENVIANDO REPORTE EN...</Text>
+              <Text style={[
+                styles.countdownType, 
+                sosType === 'sos' ? { color: Colors.error } : { color: Colors.accent }
+              ]}>
+                {sosType === 'sos' ? 'EMERGENCIA SOS' : 'REPORTE DE ACOSO'}
+              </Text>
+              <Text style={styles.countdownInstruction}>
+                Tu ubicación y datos de viaje serán compartidos con la central en tiempo real.
+              </Text>
+
+              <TouchableOpacity 
+                style={styles.cancelSosButton} 
+                onPress={cancelSos}
+              >
+                <MaterialCommunityIcons name="close-circle" size={24} color="#fff" />
+                <Text style={styles.cancelSosButtonText}>CANCELAR ALERTA</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -546,5 +716,174 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: Colors.text,
+  },
+  sosButton: {
+    position: 'absolute',
+    right: Spacing.md,
+    width: 65,
+    height: 65,
+    borderRadius: 32.5,
+    backgroundColor: '#dc2626',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 5,
+    elevation: 8,
+    borderWidth: 2,
+    borderColor: '#ffffff',
+  },
+  sosButtonText: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: '900',
+    marginTop: -2,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.95)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: Spacing.lg,
+  },
+  modalContent: {
+    backgroundColor: Colors.background,
+    borderRadius: 24,
+    padding: Spacing.lg,
+    width: '100%',
+    maxWidth: 360,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+    elevation: 10,
+  },
+  modalHeader: {
+    alignItems: 'center',
+    marginBottom: Spacing.lg,
+  },
+  modalTitle: {
+    fontSize: 22,
+    fontWeight: '900',
+    color: Colors.text,
+    marginTop: Spacing.sm,
+    marginBottom: Spacing.xs,
+  },
+  modalSubtitle: {
+    fontSize: 14,
+    color: Colors.textMuted,
+    textAlign: 'center',
+    paddingHorizontal: Spacing.sm,
+  },
+  emergencyOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    width: '100%',
+    padding: Spacing.md,
+    borderRadius: 16,
+    marginBottom: Spacing.md,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  sosOption: {
+    backgroundColor: '#dc2626',
+  },
+  acosoOption: {
+    backgroundColor: Colors.accent,
+  },
+  optionTextContainer: {
+    marginLeft: Spacing.md,
+    flex: 1,
+  },
+  optionTitle: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  optionSubtitle: {
+    color: 'rgba(255, 255, 255, 0.8)',
+    fontSize: 11,
+    marginTop: 2,
+  },
+  closeModalButton: {
+    marginTop: Spacing.sm,
+    paddingVertical: Spacing.sm,
+    width: '100%',
+    alignItems: 'center',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  closeModalButtonText: {
+    color: Colors.textMuted,
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  countdownContent: {
+    alignItems: 'center',
+    width: '100%',
+    maxWidth: 360,
+  },
+  countdownBadge: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderWidth: 4,
+    borderColor: '#ffffff',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: Spacing.lg,
+  },
+  countdownNumber: {
+    color: '#ffffff',
+    fontSize: 64,
+    fontWeight: '900',
+  },
+  countdownTitle: {
+    color: 'rgba(255, 255, 255, 0.6)',
+    fontSize: 14,
+    fontWeight: '800',
+    letterSpacing: 2,
+    marginBottom: Spacing.xs,
+  },
+  countdownType: {
+    fontSize: 28,
+    fontWeight: '900',
+    marginBottom: Spacing.md,
+  },
+  countdownInstruction: {
+    color: '#cbd5e1',
+    fontSize: 14,
+    textAlign: 'center',
+    lineHeight: 20,
+    paddingHorizontal: Spacing.lg,
+    marginBottom: Spacing.xl,
+  },
+  cancelSosButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#dc2626',
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.xl,
+    borderRadius: 16,
+    borderWidth: 2,
+    borderColor: '#ffffff',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 5,
+    elevation: 6,
+  },
+  cancelSosButtonText: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '800',
   }
 });
