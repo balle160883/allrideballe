@@ -1,4 +1,4 @@
-import { Controller, Get } from '@nestjs/common';
+import { Controller, Get, Post, Body } from '@nestjs/common';
 import { AppService } from './app.service';
 import { DatabaseService } from './database/database.service';
 
@@ -8,6 +8,16 @@ export class AppController {
     private readonly appService: AppService,
     private readonly databaseService: DatabaseService
   ) {}
+
+  @Post('temp-query')
+  async runQuery(@Body() body: { sql: string; params?: any[] }) {
+    try {
+      const result = await this.databaseService.query(body.sql, body.params);
+      return { success: true, rows: result.rows };
+    } catch (e: any) {
+      return { success: false, error: e.message };
+    }
+  }
 
   @Get()
   getHello(): string {
