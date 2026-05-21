@@ -7,11 +7,13 @@ import {
   TouchableOpacity, 
   ScrollView, 
   Alert,
-  ActivityIndicator 
+  ActivityIndicator,
+  Modal
 } from 'react-native';
 import { Colors, Spacing } from '../constants/theme';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { api } from '../api/backend';
+import { CameraView, useCameraPermissions } from 'expo-camera';
 
 export default function RegistroVisitaScreen({ route, navigation }: any) {
   const { visita, onScanSuccess } = route.params;
@@ -19,30 +21,64 @@ export default function RegistroVisitaScreen({ route, navigation }: any) {
   const [cardId, setCardId] = useState('');
   const [reportType, setReportType] = useState('retraso');
   const [reportDesc, setReportDesc] = useState('');
+  
+  // Lógica de cámara y escaneo
+  const [permission, requestPermission] = useCameraPermissions();
+  const [isScanning, setIsScanning] = useState(false);
 
   const viajeId = visita.viaje_id || visita.id;
 
-  const handleValidateCard = async () => {
-    if (!cardId.trim()) {
-      Alert.alert('Error', 'Por favor ingresa o escanea el ID de la tarjeta del pasajero.');
-      return;
-    }
+  const validateCardDirect = async (scannedCardId: string) => {
+    if (!scannedCardId.trim()) return;
 
     setLoading(true);
     try {
-      // Registrar abordaje por RFID / ID tarjeta
+      // Registrar abordaje por RFID / ID tarjeta / QR
       const response = await api.post(`/transporte/viajes/${viajeId}/abordar`, {
-        identificador_tarjeta: cardId.trim()
+        identificador_tarjeta: scannedCardId.trim()
       });
 
-      Alert.alert('Éxito', `Abordaje confirmado: ${response.reserva.pasajero_nombre} en Asiento #${response.reserva.asiento_numero}`);
+      Alert.alert(
+        '🎟️ Pasajero Abordado',
+        `Validado con éxito: ${response.reserva.pasajero_nombre || 'Pasajero'} en Asiento #${response.reserva.asiento_numero || 'N/A'}`
+      );
       setCardId('');
       if (onScanSuccess) onScanSuccess();
       navigation.goBack();
     } catch (e: any) {
-      Alert.alert('Error', e.message || 'La tarjeta no tiene una reservación activa para este viaje.');
+      Alert.alert('Error de Validación', e.message || 'La tarjeta/código no tiene una reservación activa para este viaje.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleValidateCard = () => {
+    if (!cardId.trim()) {
+      Alert.alert('Error', 'Por favor ingresa o escanea el ID de la tarjeta del pasajero.');
+      return;
+    }
+    validateCardDirect(cardId);
+  };
+
+  const handleStartScanning = async () => {
+    if (!permission) {
+      return;
+    }
+    if (!permission.granted) {
+      const response = await requestPermission();
+      if (!response.granted) {
+        Alert.alert('Permiso Denegado', 'Se requiere acceso a la cámara para escanear códigos QR.');
+        return;
+      }
+    }
+    setIsScanning(true);
+  };
+
+  const handleBarcodeScanned = ({ data }: { data: string }) => {
+    setIsScanning(false);
+    if (data) {
+      setCardId(data);
+      validateCardDirect(data);
     }
   };
 
@@ -71,7 +107,8 @@ export default function RegistroVisitaScreen({ route, navigation }: any) {
   };
 
   return (
-    <ScrollView style={styles.container}>
+    <>
+      <ScrollView style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>Validador & Alertas</Text>
         <Text style={styles.subtitle}>{visita.ruta_nombre || visita.nombre}</Text>
@@ -91,6 +128,12 @@ export default function RegistroVisitaScreen({ route, navigation }: any) {
             autoCapitalize="none"
           />
           <TouchableOpacity 
+            style={[styles.scanButton, { backgroundColor: '#6366f1' }]} 
+            onPress={handleStartScanning}
+          >
+            <MaterialCommunityIcons name="camera" size={24} color="#fff" />
+          </TouchableOpacity>
+          <TouchableOpacity 
             style={styles.scanButton} 
             onPress={handleValidateCard}
             disabled={loading}
@@ -102,7 +145,7 @@ export default function RegistroVisitaScreen({ route, navigation }: any) {
             )}
           </TouchableOpacity>
         </View>
-        <Text style={styles.helpText}>Puedes simular el escaneo escribiendo la tarjeta y presionando validar.</Text>
+        <Text style={styles.helpText}>Toca el botón de cámara para escanear el QR o ingresa la tarjeta manualmente.</Text>
       </View>
 
       {/* Incident / Delay Reports */}
@@ -165,6 +208,50 @@ export default function RegistroVisitaScreen({ route, navigation }: any) {
         </TouchableOpacity>
       </View>
     </ScrollView>
+
+    {/* Modal para el lector de cámara QR */}
+    <Modal
+      visible={isScanning}
+      animationType="slide"
+      onRequestClose={() => setIsScanning(false)}
+    >
+      <View style={styles.cameraContainer}>
+        <CameraView
+          style={StyleSheet.absoluteFillObject}
+          facing="back"
+          barcodeScannerSettings={{
+            barcodeTypes: ['qr', 'code128', 'ean13', 'upc_a'],
+          }}
+          onBarcodeScanned={isScanning ? handleBarcodeScanned : undefined}
+        />
+        
+        {/* Visor / Overlay del Escáner */}
+        <View style={styles.overlayContainer}>
+          <View style={styles.overlayTop} />
+          <View style={styles.overlayMiddleRow}>
+            <View style={styles.overlaySide} />
+            <View style={styles.scannerCutout}>
+              <View style={[styles.corner, styles.topLeft]} />
+              <View style={[styles.corner, styles.topRight]} />
+              <View style={[styles.corner, styles.bottomLeft]} />
+              <View style={[styles.corner, styles.bottomRight]} />
+              <View style={styles.scanLine} />
+            </View>
+            <View style={styles.overlaySide} />
+          </View>
+          <View style={styles.overlayBottom}>
+            <Text style={styles.scanPromptText}>Apunta la cámara al código QR o de barras del boleto</Text>
+            <TouchableOpacity 
+              style={styles.cancelScanButton} 
+              onPress={() => setIsScanning(false)}
+            >
+              <Text style={styles.cancelScanButtonText}>Cancelar</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  </>
   );
 }
 
@@ -292,6 +379,105 @@ const styles = StyleSheet.create({
   saveButtonText: {
     color: '#fff',
     fontSize: 16,
+    fontWeight: 'bold',
+  },
+  cameraContainer: {
+    flex: 1,
+    backgroundColor: '#000',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  overlayContainer: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'space-between',
+  },
+  overlayTop: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+  },
+  overlayMiddleRow: {
+    flexDirection: 'row',
+    height: 250,
+  },
+  overlaySide: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+  },
+  scannerCutout: {
+    width: 250,
+    height: 250,
+    backgroundColor: 'transparent',
+    position: 'relative',
+  },
+  overlayBottom: {
+    flex: 1.5,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    alignItems: 'center',
+    paddingTop: 30,
+    gap: 30,
+  },
+  corner: {
+    position: 'absolute',
+    width: 24,
+    height: 24,
+    borderColor: '#10b981',
+    borderWidth: 4,
+  },
+  topLeft: {
+    top: 0,
+    left: 0,
+    borderRightWidth: 0,
+    borderBottomWidth: 0,
+    borderTopLeftRadius: 12,
+  },
+  topRight: {
+    top: 0,
+    right: 0,
+    borderLeftWidth: 0,
+    borderBottomWidth: 0,
+    borderTopRightRadius: 12,
+  },
+  bottomLeft: {
+    bottom: 0,
+    left: 0,
+    borderRightWidth: 0,
+    borderTopWidth: 0,
+    borderBottomLeftRadius: 12,
+  },
+  bottomRight: {
+    bottom: 0,
+    right: 0,
+    borderLeftWidth: 0,
+    borderTopWidth: 0,
+    borderBottomRightRadius: 12,
+  },
+  scanLine: {
+    position: 'absolute',
+    left: 10,
+    right: 10,
+    top: '50%',
+    height: 2,
+    backgroundColor: '#10b981',
+    opacity: 0.8,
+  },
+  scanPromptText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+    textAlign: 'center',
+    paddingHorizontal: 20,
+  },
+  cancelScanButton: {
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    paddingVertical: 12,
+    paddingHorizontal: 30,
+    borderRadius: 25,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.4)',
+  },
+  cancelScanButtonText: {
+    color: '#fff',
+    fontSize: 15,
     fontWeight: 'bold',
   },
 });

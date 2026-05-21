@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { DatabaseService } from '../database/database.service';
 import * as bcrypt from 'bcrypt';
 
@@ -393,7 +393,7 @@ export class TransporteService {
     );
 
     if (userResult.rows.length === 0) {
-      throw new Error('La tarjeta o código QR no pertenece a ningún pasajero registrado.');
+      throw new BadRequestException('La tarjeta o código QR no pertenece a ningún pasajero registrado.');
     }
 
     const passenger = userResult.rows[0];
@@ -405,25 +405,25 @@ export class TransporteService {
     );
 
     if (reservaResult.rows.length === 0) {
-      throw new Error(`El pasajero ${passenger.nombre} no tiene una reservación activa para este viaje.`);
+      throw new BadRequestException(`El pasajero ${passenger.nombre} no tiene una reservación activa para este viaje.`);
     }
 
     const reserva = reservaResult.rows[0];
 
     if (reserva.estado === 'pendiente_aprobacion') {
-      throw new Error(`La solicitud de reservación de ${passenger.nombre} aún está pendiente de aprobación por su gerente.`);
+      throw new BadRequestException(`La solicitud de reservación de ${passenger.nombre} aún está pendiente de aprobación por su gerente.`);
     }
 
     if (reserva.estado === 'rechazado') {
-      throw new Error(`La solicitud de reservación de ${passenger.nombre} fue rechazada.`);
+      throw new BadRequestException(`La solicitud de reservación de ${passenger.nombre} fue rechazada.`);
     }
 
     if (reserva.estado === 'confirmado' || reserva.estado === 'abordado') {
-      throw new Error(`El pasajero ${passenger.nombre} ya abordó previamente.`);
+      throw new BadRequestException(`El pasajero ${passenger.nombre} ya abordó previamente.`);
     }
 
     if (reserva.estado === 'cancelado') {
-      throw new Error(`La reservación de ${passenger.nombre} para este viaje está cancelada.`);
+      throw new BadRequestException(`La reservación de ${passenger.nombre} para este viaje está cancelada.`);
     }
 
     // 3. Registrar el abordaje marcando la reserva como 'confirmado' (abordado)
