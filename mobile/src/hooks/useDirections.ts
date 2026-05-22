@@ -10,11 +10,24 @@ export function useDirections() {
   const [distance, setDistance] = useState<number>(0);
   const [loading, setLoading] = useState(false);
 
-  const fetchRoute = async (start: number[], end: number[]) => {
+  const fetchRoute = async (start: number[] | number[][], end?: number[]) => {
     setLoading(true);
     try {
+      let coordsString = '';
+      if (Array.isArray(start[0])) {
+        // Es un array de coordenadas (number[][])
+        coordsString = (start as number[][]).map(p => `${p[0]},${p[1]}`).join(';');
+      } else {
+        // Formato tradicional start, end
+        if (end) {
+          coordsString = `${(start as number[])[0]},${(start as number[])[1]};${end[0]},${end[1]}`;
+        } else {
+          setLoading(false);
+          return;
+        }
+      }
       const query = await fetch(
-        `https://api.mapbox.com/directions/v5/mapbox/driving/${start[0]},${start[1]};${end[0]},${end[1]}?steps=true&banner_instructions=true&voice_instructions=true&language=es&geometries=geojson&annotations=congestion&access_token=${MAPBOX_ACCESS_TOKEN}`
+        `https://api.mapbox.com/directions/v5/mapbox/driving-traffic/${coordsString}?steps=true&banner_instructions=true&voice_instructions=true&language=es&geometries=geojson&overview=full&annotations=congestion&access_token=${MAPBOX_ACCESS_TOKEN}`
       );
       const json = await query.json();
       
@@ -24,19 +37,16 @@ export function useDirections() {
         setDuration(routeData.duration || 0);
         setDistance(routeData.distance || 0);
         
-        if (routeData.legs && routeData.legs[0]) {
-          const leg = routeData.legs[0];
-          if (leg.steps) {
-            setSteps(leg.steps);
-          } else {
-            setSteps([]);
-          }
-          
-          if (leg.annotation && leg.annotation.congestion) {
-            setCongestion(leg.annotation.congestion);
-          } else {
-            setCongestion([]);
-          }
+        if (routeData.legs && routeData.legs.length > 0) {
+          const allSteps = routeData.legs.reduce((acc: any[], leg: any) => {
+            return acc.concat(leg.steps || []);
+          }, []);
+          setSteps(allSteps);
+
+          const allCongestion = routeData.legs.reduce((acc: string[], leg: any) => {
+            return acc.concat(leg.annotation?.congestion || []);
+          }, []);
+          setCongestion(allCongestion);
         } else {
           setSteps([]);
           setCongestion([]);

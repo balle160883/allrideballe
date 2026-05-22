@@ -127,7 +127,7 @@ function getLaneIcon(indications: string[]): string {
 }
 
 export default function MapaScreen({ route: routeProp, navigation }: any) {
-  const { viajes } = useViajes();
+  const { viajes, refresh } = useViajes();
   const { user } = useAuth();
   const { route, steps, congestion, duration, distance, fetchRoute, clearRoute, loading: routeLoading } = useDirections();
   const [userLocation, setUserLocation] = useState<number[] | null>(null);
@@ -347,6 +347,60 @@ export default function MapaScreen({ route: routeProp, navigation }: any) {
     }
   }, [viajeActivo]);
 
+  // Polling periódico para actualizar la ubicación en tiempo real de los buses
+  useEffect(() => {
+    if (navigationMode) return;
+
+    // Refrescar al inicio
+    refresh();
+
+    const interval = setInterval(() => {
+      refresh();
+    }, 10000); // 10 segundos
+
+    return () => clearInterval(interval);
+  }, [navigationMode]);
+
+  // Calcular la ruta completa del viaje (conecta todas las paradas) cuando no se está navegando
+  useEffect(() => {
+    if (navigationMode) return;
+    if (selectedParada) return;
+
+    if (selectedViaje && selectedViaje.paradas && selectedViaje.paradas.length > 0) {
+      const paradasSorted = [...selectedViaje.paradas].sort((a, b) => a.orden - b.orden);
+      const points: number[][] = [];
+
+      // Si el viaje está en ruta y tiene última ubicación conocida del conductor, empezamos por ahí
+      if (selectedViaje.viaje_estado === 'en_ruta' && selectedViaje.ultima_ubicacion?.longitud && selectedViaje.ultima_ubicacion?.latitud) {
+        points.push([selectedViaje.ultima_ubicacion.longitud, selectedViaje.ultima_ubicacion.latitud]);
+      } else if (userLocation) {
+        // Fallback al GPS local si está disponible
+        points.push(userLocation);
+      }
+
+      // Añadimos las paradas
+      paradasSorted.forEach(p => {
+        if (p.longitud && p.latitud) {
+          points.push([p.longitud, p.latitud]);
+        }
+      });
+
+      if (points.length >= 2) {
+        fetchRoute(points);
+      }
+    } else {
+      clearRoute();
+    }
+  }, [selectedViaje, selectedParada, navigationMode, userLocation == null]);
+
+  // Recalcular la ruta a la parada seleccionada cuando el GPS se activa si era null (solución a carrera de GPS)
+  useEffect(() => {
+    if (navigationMode) return;
+    if (selectedParada && userLocation && selectedParada.longitud && selectedParada.latitud) {
+      fetchRoute(userLocation, [selectedParada.longitud, selectedParada.latitud]);
+    }
+  }, [selectedParada, userLocation == null]);
+
   // Acomodar el zoom y encuadre del mapa según la ruta calculada (solo en vista normal)
   useEffect(() => {
     if (navigationMode) return;
@@ -520,16 +574,31 @@ export default function MapaScreen({ route: routeProp, navigation }: any) {
           pitch={navigationMode ? 55 : 0}
         />
         
-        {!navigationMode && <Mapbox.UserLocation />}
-
-        {navigationMode && snappedLocation && (
-          <Mapbox.MarkerView id="snappedPuck" coordinate={snappedLocation}>
-            <View style={styles.puckContainer}>
-              <View style={[styles.puckArrow, { transform: [{ rotate: `${snappedHeading}deg` }] }]}>
-                <MaterialCommunityIcons name="navigation" size={28} color="#00b0ff" />
+        {/* Mostrar ubicación del usuario */}
+        {!navigationMode ? (
+          <Mapbox.UserLocation />
+        ) : (
+          // En modo navegación activa
+          snappedLocation ? (
+            <Mapbox.MarkerView id="snappedPuck" coordinate={snappedLocation}>
+              <View style={styles.puckContainer}>
+                <View style={[styles.puckArrow, { transform: [{ rotate: `${snappedHeading}deg` }] }]}>
+                  <MaterialCommunityIcons name="navigation" size={28} color="#00b0ff" />
+                </View>
               </View>
-            </View>
-          </Mapbox.MarkerView>
+            </Mapbox.MarkerView>
+          ) : (
+            // Fallback si snappedLocation es nulo
+            userLocation && (
+              <Mapbox.MarkerView id="fallbackPuck" coordinate={userLocation}>
+                <View style={styles.puckContainer}>
+                  <View style={styles.puckArrow}>
+                    <MaterialCommunityIcons name="navigation" size={28} color="#00b0ff" />
+                  </View>
+                </View>
+              </Mapbox.MarkerView>
+            )
+          )
         )}
 
         {/* Marcadores de Paradas */}
@@ -550,15 +619,51 @@ export default function MapaScreen({ route: routeProp, navigation }: any) {
           </Mapbox.MarkerView>
         ))}
 
+        {/* Marcador del Autobús Seleccionado (Ubicación del Conductor en Vivo) */}
+        {selectedViaje && (
+          (() => {
+            const loc = selectedViaje.ultima_ubicacion 
+              ? [selectedViaje.ultima_ubicacion.longitud, selectedViaje.ultima_ubicacion.latitud]
+              : (selectedViaje.paradas?.[0] ? [selectedViaje.paradas[0].longitud, selectedViaje.paradas[0].latitud] : null);
+            
+            if (!loc) return null;
+
+            return (
+              <Mapbox.MarkerView
+                key={`bus-selected-${selectedViaje.id}`}
+                id={`bus-selected-${selectedViaje.id}`}
+                coordinate={loc}
+              >
+                <View style={styles.markerBusSelectedContainer}>
+                  <View style={styles.markerBus}>
+                    <MaterialCommunityIcons 
+                      name="bus" 
+                      size={28} 
+                      color={getMarkerColor(selectedViaje.viaje_estado)} 
+                    />
+                  </View>
+                  {selectedViaje.ultima_ubicacion?.timestamp && (
+                    <View style={styles.busBadge}>
+                      <Text style={styles.busBadgeText}>En vivo</Text>
+                    </View>
+                  )}
+                </View>
+              </Mapbox.MarkerView>
+            );
+          })()
+        )}
+
         {/* Marcadores de Viajes (solo si no hay viaje seleccionado) */}
         {!selectedViaje && viajes.map((v) => {
-          const primeraParada = v.paradas?.[0];
-          if (!primeraParada) return null;
+          const loc = v.ultima_ubicacion
+            ? [v.ultima_ubicacion.longitud, v.ultima_ubicacion.latitud]
+            : (v.paradas?.[0] ? [v.paradas[0].longitud, v.paradas[0].latitud] : null);
+          if (!loc) return null;
           return (
             <Mapbox.MarkerView
-              key={v.id}
-              id={v.id}
-              coordinate={[primeraParada.longitud, primeraParada.latitud]}
+              key={`bus-${v.id}`}
+              id={`bus-${v.id}`}
+              coordinate={loc}
             >
               <TouchableOpacity 
                 style={styles.markerBus}
@@ -1498,5 +1603,30 @@ const styles = StyleSheet.create({
   laneInvalid: {
     backgroundColor: 'rgba(255, 255, 255, 0.05)',
     borderColor: 'rgba(255, 255, 255, 0.15)',
-  }
+  },
+  markerBusSelectedContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  busBadge: {
+    position: 'absolute',
+    top: -12,
+    backgroundColor: Colors.success,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 8,
+    borderWidth: 1.5,
+    borderColor: '#ffffff',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    elevation: 3,
+  },
+  busBadgeText: {
+    color: '#ffffff',
+    fontSize: 9,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+  },
 });

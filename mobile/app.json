@@ -2,7 +2,7 @@
   "expo": {
     "name": "Pro Mobile",
     "slug": "pro-mobile",
-    "owner": "cpo-1",
+    "owner": "pro-mobile",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/logo_v2.png",
@@ -39,7 +39,9 @@
         "android.permission.ACCESS_FINE_LOCATION",
         "android.permission.ACCESS_BACKGROUND_LOCATION",
         "android.permission.FOREGROUND_SERVICE",
-        "android.permission.FOREGROUND_SERVICE_LOCATION"
+        "android.permission.FOREGROUND_SERVICE_LOCATION",
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO"
       ]
     },
     "web": {
@@ -78,7 +80,7 @@
     ],
     "extra": {
       "eas": {
-        "projectId": "7649c248-6504-4a84-ad4c-5038957aa0ba"
+        "projectId": "083ee954-80fa-4802-af06-3e5a8e8b7517"
       }
     }
   }
