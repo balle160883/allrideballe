@@ -192,7 +192,13 @@ export class TransporteService {
       'INSERT INTO "viajes" ("ruta_id", "vehiculo_id", "conductor_id", "fecha_hora_salida") VALUES ($1, $2, $3, $4) RETURNING *',
       [data.ruta_id, data.vehiculo_id, data.conductor_id, data.fecha_hora_salida]
     );
-    return result.rows[0];
+    const createdViaje = result.rows[0];
+    if (createdViaje) {
+      this.notifyDriverNewTrip(createdViaje.id).catch(err => {
+        this.logger.error(`Error al notificar al conductor del viaje #${createdViaje.id}: ${err.message}`);
+      });
+    }
+    return createdViaje;
   }
 
   async updateViajeEstado(id: number, estado: string) {
@@ -860,6 +866,75 @@ export class TransporteService {
       throw new Error('Pasajero no encontrado.');
     }
     return result.rows[0];
+  }
+
+  async updatePushToken(userId: string, token: string) {
+    await this.databaseService.query(
+      'UPDATE "usuarios" SET "push_token" = $1 WHERE "id" = $2',
+      [token || null, userId]
+    );
+    return { success: true };
+  }
+
+  private async notifyDriverNewTrip(viajeId: number) {
+    try {
+      const res = await this.databaseService.query(
+        `SELECT v.fecha_hora_salida, r.nombre as ruta_nombre, u.push_token, u.nombre as conductor_nombre
+         FROM "viajes" v
+         JOIN "rutas" r ON v.ruta_id = r.id
+         JOIN "usuarios" u ON v.conductor_id = u.id
+         WHERE v.id = $1`,
+        [viajeId]
+      );
+      
+      if (res.rows.length === 0) return;
+      const { fecha_hora_salida, ruta_nombre, push_token } = res.rows[0];
+      
+      if (push_token) {
+        const localTime = new Date(fecha_hora_salida).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        const title = '🚌 Nuevo Viaje Asignado';
+        const body = `Hola, se te ha asignado la ruta "${ruta_nombre}" con salida a las ${localTime}.`;
+        
+        await this.sendExpoPushNotification(push_token, title, body, { viaje_id: viajeId });
+      }
+    } catch (e: any) {
+      this.logger.error(`Error en notifyDriverNewTrip para viaje #${viajeId}: ${e.message}`);
+    }
+  }
+
+  private async sendExpoPushNotification(token: string, title: string, body: string, data?: any) {
+    if (!token || !token.startsWith('ExponentPushToken')) {
+      this.logger.warn(`Token de notificación push ausente o inválido: ${token}`);
+      return;
+    }
+    
+    try {
+      const response = await fetch('https://exp.host/--/api/v2/push/send', {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json',
+          'Accept-encoding': 'gzip, deflate',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          to: token,
+          sound: 'default',
+          title,
+          body,
+          data,
+        }),
+      });
+      
+      if (!response.ok) {
+        const errText = await response.text();
+        this.logger.error(`Error de envío push a Expo: ${errText}`);
+      } else {
+        const resJson: any = await response.json();
+        this.logger.log(`Notificación push enviada con éxito a ${token}: ${JSON.stringify(resJson)}`);
+      }
+    } catch (e: any) {
+      this.logger.error(`Fallo al enviar notificación push a Expo: ${e.message}`);
+    }
   }
 
   async generarSmartRutas(maxDistanciaKm: number = 2.5, maxPasajerosPorRuta: number = 15) {

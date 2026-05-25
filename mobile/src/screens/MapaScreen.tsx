@@ -140,6 +140,15 @@ export default function MapaScreen({ route: routeProp, navigation }: any) {
   const [snappedLocation, setSnappedLocation] = useState<number[] | null>(null);
   const [snappedHeading, setSnappedHeading] = useState<number>(0);
   const cameraRef = useRef<Mapbox.Camera>(null);
+  const prevViajesLengthRef = useRef<number>(viajes.length);
+
+  const formatTripTime = (timeMs: number) => {
+    if (!timeMs) return '';
+    const d = new Date(timeMs);
+    const timeStr = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const dateStr = d.toLocaleDateString('es-MX', { day: 'numeric', month: 'short' });
+    return `${dateStr} · ${timeStr}`;
+  };
 
   const routeGeoJSON = useMemo(() => {
     if (!route || !route.coordinates || route.coordinates.length < 2) {
@@ -346,6 +355,28 @@ export default function MapaScreen({ route: routeProp, navigation }: any) {
       setSelectedViaje(viajeActivo);
     }
   }, [viajeActivo]);
+
+  // Alerta de voz (TTS) cuando se asigna un nuevo viaje a la lista
+  useEffect(() => {
+    if (viajes.length > prevViajesLengthRef.current) {
+      const nuevoViaje = viajes[0];
+      if (nuevoViaje && !isMuted) {
+        const timeStr = formatTripTime(nuevoViaje.fecha_hora_salida);
+        const mensaje = `Atención, se te ha asignado un nuevo viaje, ${nuevoViaje.ruta_nombre}, programado para salir el ${timeStr}.`;
+        Speech.speak(mensaje, { language: 'es' });
+      }
+    }
+    prevViajesLengthRef.current = viajes.length;
+  }, [viajes, isMuted]);
+
+  // Alerta de voz (TTS) al seleccionar o cambiar el viaje activo
+  useEffect(() => {
+    if (selectedViaje && !isMuted) {
+      const timeStr = formatTripTime(selectedViaje.fecha_hora_salida);
+      const mensaje = `Viaje seleccionado: ${selectedViaje.ruta_nombre}, hora de salida: ${timeStr}.`;
+      Speech.speak(mensaje, { language: 'es' });
+    }
+  }, [selectedViaje, isMuted]);
 
   // Polling periódico para actualizar la ubicación en tiempo real de los buses
   useEffect(() => {
@@ -737,7 +768,7 @@ export default function MapaScreen({ route: routeProp, navigation }: any) {
                     color={selectedViaje?.id === v.id ? '#fff' : Colors.primary} 
                   />
                   <Text style={[styles.viajeChipText, selectedViaje?.id === v.id && styles.viajeChipTextActivo]}>
-                    {v.ruta_nombre}
+                    {v.ruta_nombre} ({formatTripTime(v.fecha_hora_salida)})
                   </Text>
                 </TouchableOpacity>
               ))

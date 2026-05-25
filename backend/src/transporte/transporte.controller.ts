@@ -257,6 +257,11 @@ export class TransporteController {
     return this.transporteService.setDomicilioPasajero(req.user.userId, data);
   }
 
+  @Patch('usuarios/push-token')
+  async updatePushToken(@Request() req: any, @Body() data: { push_token: string }) {
+    return this.transporteService.updatePushToken(req.user.userId, data.push_token);
+  }
+
   @Post('routing/simular')
   async simularSmartRutas(@Body() data: { maxDistanciaKm?: number; maxPasajerosPorRuta?: number }) {
     const dist = data.maxDistanciaKm !== undefined ? Number(data.maxDistanciaKm) : 2.5;

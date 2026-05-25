@@ -62,6 +62,9 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
         ALTER TABLE "usuarios" DROP CONSTRAINT IF EXISTS "usuarios_rol_check";
         ALTER TABLE "usuarios" ADD CONSTRAINT "usuarios_rol_check" CHECK ("rol" IN ('admin_cliente', 'admin_proveedor', 'conductor', 'pasajero', 'gerente'));
 
+        -- Agregar columna para tokens de notificación push
+        ALTER TABLE "usuarios" ADD COLUMN IF NOT EXISTS "push_token" VARCHAR(255);
+
         -- Alterar constraint de estado en reservas para nuevos estados de aprobación
         ALTER TABLE "reservas" DROP CONSTRAINT IF EXISTS "reservas_estado_check";
         ALTER TABLE "reservas" ADD CONSTRAINT "reservas_estado_check" CHECK ("estado" IN ('pendiente_aprobacion', 'reservado', 'confirmado', 'no_abordado', 'cancelado', 'rechazado'));

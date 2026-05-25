@@ -251,12 +251,14 @@ export default function ViajesPage() {
                       </td>
                       <td className="p-4">
                         <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${
-                          viaje.estado === 'en_progreso' ? 'bg-blue-50 text-blue-700' :
+                          viaje.estado === 'en_ruta' ? 'bg-blue-50 text-blue-700' :
                           viaje.estado === 'programado' ? 'bg-amber-50 text-amber-700' :
+                          viaje.estado === 'cancelado' ? 'bg-red-50 text-red-700' :
                           'bg-emerald-50 text-emerald-700'
                         }`}>
-                          {viaje.estado === 'en_progreso' ? 'En Progreso' :
-                           viaje.estado === 'programado' ? 'Programado' : 'Finalizado'}
+                          {viaje.estado === 'en_ruta' ? 'En Ruta' :
+                           viaje.estado === 'programado' ? 'Programado' :
+                           viaje.estado === 'cancelado' ? 'Cancelado' : 'Finalizado'}
                         </span>
                       </td>
                       <td className="p-4 pr-6 text-right whitespace-nowrap">
