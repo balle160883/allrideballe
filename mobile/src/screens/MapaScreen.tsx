@@ -467,7 +467,24 @@ export default function MapaScreen({ route: routeProp, navigation }: any) {
 
   useEffect(() => {
     const params = routeProp?.params;
-    if (params?.viaje) {
+    if (params?.viajeId) {
+      const match = viajes.find(
+        (v) =>
+          v.id.toString() === params.viajeId.toString() ||
+          v.viaje_id.toString() === params.viajeId.toString()
+      );
+      if (match) {
+        setSelectedViaje(match);
+        if (match.paradas && match.paradas.length > 0) {
+          const primeraParada = match.paradas[0];
+          cameraRef.current?.setCamera({
+            centerCoordinate: [primeraParada.longitud, primeraParada.latitud],
+            zoomLevel: 12,
+            animationDuration: 1000
+          });
+        }
+      }
+    } else if (params?.viaje) {
       setSelectedViaje(params.viaje);
       if (params.viaje.paradas && params.viaje.paradas.length > 0) {
         const primeraParada = params.viaje.paradas[0];
@@ -478,7 +495,7 @@ export default function MapaScreen({ route: routeProp, navigation }: any) {
         });
       }
     }
-  }, [routeProp?.params]);
+  }, [routeProp?.params, viajes]);
 
   // Reiniciar el índice de pasos cuando la ruta cambie
   useEffect(() => {
@@ -832,34 +849,36 @@ export default function MapaScreen({ route: routeProp, navigation }: any) {
            </View>
            <Text style={styles.paradaInfoNombre}>{selectedParada.nombre}</Text>
            
-           <View style={styles.paradaActionButtons}>
-              <TouchableOpacity 
-                style={styles.navButton} 
-                onPress={() => startNavigation(selectedParada)}
-              >
-                {routeLoading ? (
-                    <ActivityIndicator color="#fff" />
-                ) : (
-                    <>
-                      <MaterialCommunityIcons name="navigation-variant" color="#fff" size={20} />
-                      <Text style={styles.navButtonText}>Navegar</Text>
-                    </>
-                )}
-              </TouchableOpacity>
-
-              {isConductor && selectedViaje && (
+           {isConductor && (
+             <View style={styles.paradaActionButtons}>
                 <TouchableOpacity 
-                  style={[styles.navButton, { backgroundColor: Colors.success, flex: 2 }]} 
-                  onPress={() => {
-                    handleCloseDetail();
-                    irADetalleViaje(selectedViaje);
-                  }}
+                  style={styles.navButton} 
+                  onPress={() => startNavigation(selectedParada)}
                 >
-                  <MaterialCommunityIcons name="qrcode-scan" color="#fff" size={20} />
-                  <Text style={styles.navButtonText}>Escanear QR</Text>
+                  {routeLoading ? (
+                      <ActivityIndicator color="#fff" />
+                  ) : (
+                      <>
+                        <MaterialCommunityIcons name="navigation-variant" color="#fff" size={20} />
+                        <Text style={styles.navButtonText}>Navegar</Text>
+                      </>
+                  )}
                 </TouchableOpacity>
-              )}
-           </View>
+  
+                {selectedViaje && (
+                  <TouchableOpacity 
+                    style={[styles.navButton, { backgroundColor: Colors.success, flex: 2 }]} 
+                    onPress={() => {
+                      handleCloseDetail();
+                      irADetalleViaje(selectedViaje);
+                    }}
+                  >
+                    <MaterialCommunityIcons name="qrcode-scan" color="#fff" size={20} />
+                    <Text style={styles.navButtonText}>Escanear QR</Text>
+                  </TouchableOpacity>
+                )}
+             </View>
+           )}
         </View>
       )}
 

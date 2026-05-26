@@ -18,6 +18,7 @@ import * as SecureStore from 'expo-secure-store';
 export default function DetalleViajeScreen({ route, navigation }: any) {
   const { visita: viaje } = route.params;
   const { user } = useAuth();
+  const isConductor = user?.rol === 'conductor';
   const [loading, setLoading] = useState(false);
   const [reservas, setReservas] = useState<any[]>([]);
   const [tripState, setTripState] = useState(viaje.viaje_estado || viaje.estado);
@@ -208,110 +209,125 @@ export default function DetalleViajeScreen({ route, navigation }: any) {
         </Text>
       </View>
 
-      {/* ── Manifiesto de Pasajeros ── */}
-      <View style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <MaterialCommunityIcons name="format-list-checks" size={18} color={Colors.primary} />
-          <Text style={styles.sectionTitle}>Manifiesto de Pasajeros</Text>
-          <Text style={styles.sectionSubtitle}>Toca un pasajero para confirmar/revertir abordaje</Text>
+      {/* ── Manifiesto de Pasajeros (Solo Conductor) ── */}
+      {isConductor && (
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <MaterialCommunityIcons name="format-list-checks" size={18} color={Colors.primary} />
+            <Text style={styles.sectionTitle}>Manifiesto de Pasajeros</Text>
+            <Text style={styles.sectionSubtitle}>Toca un pasajero para confirmar/revertir abordaje</Text>
+          </View>
+
+          {loading && reservas.length === 0 ? (
+            <ActivityIndicator size="small" color={Colors.primary} style={{ marginVertical: 20 }} />
+          ) : reservas.length === 0 ? (
+            <View style={styles.emptyManifest}>
+              <MaterialCommunityIcons name="account-off-outline" size={36} color={Colors.border} />
+              <Text style={styles.emptyText}>Sin reservaciones para este viaje</Text>
+            </View>
+          ) : (
+            <View style={styles.passengerList}>
+              {reservas.map((res: any, idx: number) => {
+                const isBoarded = res.estado === 'confirmado';
+                return (
+                  <TouchableOpacity
+                    key={res.id}
+                    style={[styles.passengerRow, isBoarded && styles.passengerBoarded]}
+                    onPress={() => handleToggleBoarding(res.id, res.estado)}
+                    activeOpacity={0.7}
+                  >
+                    {/* Número de asiento */}
+                    <View style={[styles.seatBadge, isBoarded && styles.seatBadgeBoarded]}>
+                      <Text style={[styles.seatText, isBoarded && styles.seatTextBoarded]}>
+                        {res.asiento_numero || idx + 1}
+                      </Text>
+                    </View>
+
+                    {/* Info pasajero */}
+                    <View style={styles.passengerInfo}>
+                      <Text style={[styles.passengerName, isBoarded && styles.passengerNameBoarded]}>
+                        {res.pasajero_nombre || 'Pasajero'}
+                      </Text>
+                      <Text style={styles.passengerCard}>
+                        {res.identificador_tarjeta
+                          ? `🪪 ${res.identificador_tarjeta}`
+                          : '⚠️ Sin tarjeta asignada'}
+                      </Text>
+                    </View>
+
+                    {/* Check icon */}
+                    <MaterialCommunityIcons
+                      name={isBoarded ? 'check-circle' : 'checkbox-blank-circle-outline'}
+                      size={26}
+                      color={isBoarded ? '#10b981' : Colors.border}
+                    />
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          )}
         </View>
+      )}
 
-        {loading && reservas.length === 0 ? (
-          <ActivityIndicator size="small" color={Colors.primary} style={{ marginVertical: 20 }} />
-        ) : reservas.length === 0 ? (
-          <View style={styles.emptyManifest}>
-            <MaterialCommunityIcons name="account-off-outline" size={36} color={Colors.border} />
-            <Text style={styles.emptyText}>Sin reservaciones para este viaje</Text>
-          </View>
-        ) : (
-          <View style={styles.passengerList}>
-            {reservas.map((res: any, idx: number) => {
-              const isBoarded = res.estado === 'confirmado';
-              return (
-                <TouchableOpacity
-                  key={res.id}
-                  style={[styles.passengerRow, isBoarded && styles.passengerBoarded]}
-                  onPress={() => handleToggleBoarding(res.id, res.estado)}
-                  activeOpacity={0.7}
-                >
-                  {/* Número de asiento */}
-                  <View style={[styles.seatBadge, isBoarded && styles.seatBadgeBoarded]}>
-                    <Text style={[styles.seatText, isBoarded && styles.seatTextBoarded]}>
-                      {res.asiento_numero || idx + 1}
-                    </Text>
-                  </View>
-
-                  {/* Info pasajero */}
-                  <View style={styles.passengerInfo}>
-                    <Text style={[styles.passengerName, isBoarded && styles.passengerNameBoarded]}>
-                      {res.pasajero_nombre || 'Pasajero'}
-                    </Text>
-                    <Text style={styles.passengerCard}>
-                      {res.identificador_tarjeta
-                        ? `🪪 ${res.identificador_tarjeta}`
-                        : '⚠️ Sin tarjeta asignada'}
-                    </Text>
-                  </View>
-
-                  {/* Check icon */}
-                  <MaterialCommunityIcons
-                    name={isBoarded ? 'check-circle' : 'checkbox-blank-circle-outline'}
-                    size={26}
-                    color={isBoarded ? '#10b981' : Colors.border}
-                  />
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-        )}
-      </View>
-
-      {/* ── Acciones del Conductor ── */}
+      {/* ── Acciones de Navegación y Recorrido ── */}
       <View style={styles.actionsSection}>
-        {tripState === 'programado' && (
-          <TouchableOpacity
-            style={[styles.actionBtn, { backgroundColor: Colors.primary }]}
-            onPress={handleStartTrip}
-            disabled={loading}
-          >
-            {loading
-              ? <ActivityIndicator color="#fff" />
-              : <MaterialCommunityIcons name="play-circle" color="#fff" size={26} />}
-            <Text style={styles.actionBtnText}>Iniciar Recorrido</Text>
-          </TouchableOpacity>
-        )}
-
-        {tripState === 'en_ruta' && (
+        {isConductor ? (
           <>
-            <TouchableOpacity
-              style={[styles.actionBtn, { backgroundColor: '#10b981' }]}
-              onPress={handleFinishTrip}
-              disabled={loading}
-            >
-              {loading
-                ? <ActivityIndicator color="#fff" />
-                : <MaterialCommunityIcons name="flag-checkered" color="#fff" size={26} />}
-              <Text style={styles.actionBtnText}>Terminar Recorrido</Text>
-            </TouchableOpacity>
+            {tripState === 'programado' && (
+              <TouchableOpacity
+                style={[styles.actionBtn, { backgroundColor: Colors.primary }]}
+                onPress={handleStartTrip}
+                disabled={loading}
+              >
+                {loading
+                  ? <ActivityIndicator color="#fff" />
+                  : <MaterialCommunityIcons name="play-circle" color="#fff" size={26} />}
+                <Text style={styles.actionBtnText}>Iniciar Recorrido</Text>
+              </TouchableOpacity>
+            )}
+
+            {tripState === 'en_ruta' && (
+              <>
+                <TouchableOpacity
+                  style={[styles.actionBtn, { backgroundColor: '#10b981' }]}
+                  onPress={handleFinishTrip}
+                  disabled={loading}
+                >
+                  {loading
+                    ? <ActivityIndicator color="#fff" />
+                    : <MaterialCommunityIcons name="flag-checkered" color="#fff" size={26} />}
+                  <Text style={styles.actionBtnText}>Terminar Recorrido</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.actionBtn, { backgroundColor: '#6366f1' }]}
+                  onPress={handleScanQR}
+                  disabled={loading}
+                >
+                  <MaterialCommunityIcons name="qrcode-scan" color="#fff" size={26} />
+                  <Text style={styles.actionBtnText}>Escanear QR / RFID</Text>
+                </TouchableOpacity>
+              </>
+            )}
 
             <TouchableOpacity
-              style={[styles.actionBtn, { backgroundColor: '#6366f1' }]}
-              onPress={handleScanQR}
-              disabled={loading}
+              style={[styles.actionBtn, { backgroundColor: Colors.secondary }]}
+              onPress={handleNavigate}
             >
-              <MaterialCommunityIcons name="qrcode-scan" color="#fff" size={26} />
-              <Text style={styles.actionBtnText}>Escanear QR / RFID</Text>
+              <MaterialCommunityIcons name="navigation-variant" color="#fff" size={26} />
+              <Text style={styles.actionBtnText}>Abrir Navegación GPS</Text>
             </TouchableOpacity>
           </>
+        ) : (
+          /* Vista del Pasajero: Solo un botón para ver el conductor en el mapa */
+          <TouchableOpacity
+            style={[styles.actionBtn, { backgroundColor: Colors.primary }]}
+            onPress={handleNavigate}
+          >
+            <MaterialCommunityIcons name="map-marker-radius" color="#fff" size={26} />
+            <Text style={styles.actionBtnText}>Ver ubicación en el Mapa</Text>
+          </TouchableOpacity>
         )}
-
-        <TouchableOpacity
-          style={[styles.actionBtn, { backgroundColor: Colors.secondary }]}
-          onPress={handleNavigate}
-        >
-          <MaterialCommunityIcons name="navigation-variant" color="#fff" size={26} />
-          <Text style={styles.actionBtnText}>Abrir Navegación GPS</Text>
-        </TouchableOpacity>
       </View>
 
       <View style={{ height: 32 }} />

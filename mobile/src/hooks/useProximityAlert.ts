@@ -68,8 +68,8 @@ export function useProximityAlert(viajes: Viaje[], onNavigate: (viaje: Viaje) =>
           const title = '🚌 Autobús Cercano';
           const body = `El autobús de la ruta "${viaje.ruta_nombre}" está a ${distanciaKm} km de tu parada "${paradaDestino.nombre}". ¡Prepárate para abordar!`;
           
-          // Enviar notificación push local
-          scheduleLocalNotification(title, body, 1);
+          // Enviar notificación push local con deep link
+          scheduleLocalNotification(title, body, 1, `promobile://viaje/${viaje.viaje_id}`);
           
           // También mostrar alerta in-app por si la app está abierta
           Alert.alert(

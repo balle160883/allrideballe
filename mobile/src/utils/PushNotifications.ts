@@ -23,20 +23,24 @@ export async function registerForPushNotificationsAsync() {
       importance: Notifications.AndroidImportance.MAX,
       vibrationPattern: [0, 250, 250, 250],
       lightColor: '#FF231F7C',
+      sound: 'default',
     });
   }
 
+  // Solicitar permisos de notificación (tanto en simulador como en dispositivo físico)
+  const { status: existingStatus } = await Notifications.getPermissionsAsync();
+  let finalStatus = existingStatus;
+  if (existingStatus !== 'granted') {
+    const { status } = await Notifications.requestPermissionsAsync();
+    finalStatus = status;
+  }
+
+  if (finalStatus !== 'granted') {
+    console.warn('Permisos de notificación no otorgados.');
+    return;
+  }
+
   if (Device.isDevice) {
-    const { status: existingStatus } = await Notifications.getPermissionsAsync();
-    let finalStatus = existingStatus;
-    if (existingStatus !== 'granted') {
-      const { status } = await Notifications.requestPermissionsAsync();
-      finalStatus = status;
-    }
-    if (finalStatus !== 'granted') {
-      alert('Failed to get push token for push notification!');
-      return;
-    }
     // Para Expo SDK 51+, getExpoPushTokenAsync requiere projectId.
     // Intentaremos obtenerlo de Constants o pasar un objeto vacío.
     try {
@@ -46,7 +50,7 @@ export async function registerForPushNotificationsAsync() {
       console.warn('Error al obtener Expo Push Token:', e.message);
     }
   } else {
-    alert('Must use physical device for Push Notifications');
+    console.log('Ejecutando en simulador: las notificaciones push remotas no están disponibles, pero las locales sí.');
   }
 
   return token;
@@ -86,13 +90,14 @@ export function usePushNotifications() {
 }
 
 // Función para enviar una notificación local
-export async function scheduleLocalNotification(title: string, body: string, seconds = 1) {
+export async function scheduleLocalNotification(title: string, body: string, seconds = 1, url?: string) {
   await Notifications.scheduleNotificationAsync({
     content: {
       title,
       body,
-      sound: true,
+      sound: 'default',
       priority: Notifications.AndroidNotificationPriority.HIGH,
+      data: url ? { url } : undefined,
     },
     trigger: {
       seconds,

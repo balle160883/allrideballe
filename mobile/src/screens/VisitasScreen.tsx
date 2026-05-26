@@ -17,11 +17,14 @@ import { useFocusEffect } from '@react-navigation/native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useProximityAlert } from '../hooks/useProximityAlert';
 import RatingModal from '../components/RatingModal';
+import { useAuth } from '../context/AuthContext';
 
 type Tab = 'activos' | 'completados';
 
 export default function VisitasScreen({ navigation }: any) {
   const { viajes, loading, refresh, calificarViaje } = useViajes();
+  const { user } = useAuth();
+  const isConductor = user?.rol === 'conductor';
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState<Tab>('activos');
   const [ratingModalVisible, setRatingModalVisible] = useState(false);
@@ -160,7 +163,7 @@ export default function VisitasScreen({ navigation }: any) {
         renderItem={({ item }) => (
           <View style={styles.cardContainer}>
             <ViajeCard viaje={item} onPress={handleViajePress} />
-            {item.isRealizada && (
+            {item.isRealizada && !isConductor && (
               <TouchableOpacity
                 style={styles.rateButton}
                 onPress={() => handleCalificarPress(item)}
