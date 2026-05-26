@@ -25,6 +25,7 @@
       },
       "predictiveBackGestureEnabled": false,
       "package": "com.viaempresas.mobile",
+      "googleServicesFile": "./google-services.json",
       "queries": {
         "schemes": [
           "waze",
