@@ -234,7 +234,13 @@ export class TransporteService {
       'INSERT INTO "reservas" ("viaje_id", "pasajero_id", "asiento_numero") VALUES ($1, $2, $3) RETURNING *',
       [data.viaje_id, data.pasajero_id, data.asiento_numero]
     );
-    return result.rows[0];
+    const createdReserva = result.rows[0];
+    if (createdReserva) {
+      this.notifyPassengerReservaStatus(createdReserva.id, 'creada').catch(err => {
+        this.logger.error(`Error al notificar al pasajero de creación de reserva #${createdReserva.id}: ${err.message}`);
+      });
+    }
+    return createdReserva;
   }
 
   async updateReservaEstado(id: number, estado: string) {
@@ -388,7 +394,7 @@ export class TransporteService {
     return reserva;
   }
 
-  private async notifyPassengerReservaStatus(reservaId: number, status: 'aprobada' | 'rechazada') {
+  private async notifyPassengerReservaStatus(reservaId: number, status: 'aprobada' | 'rechazada' | 'creada') {
     try {
       const res = await this.databaseService.query(
         `SELECT u.push_token, u.nombre as pasajero_nombre, r.nombre as ruta_nombre, v.fecha_hora_salida
@@ -415,9 +421,12 @@ export class TransporteService {
         if (status === 'aprobada') {
           title = '🎫 Reserva Aprobada';
           body = `Hola ${pasajero_nombre}, tu reservación para la ruta "${ruta_nombre}" con salida a las ${localTime} ha sido aprobada.`;
-        } else {
+        } else if (status === 'rechazada') {
           title = '❌ Reserva Rechazada';
           body = `Hola ${pasajero_nombre}, tu reservación para la ruta "${ruta_nombre}" con salida a las ${localTime} ha sido rechazada.`;
+        } else if (status === 'creada') {
+          title = '🚌 Viaje Reservado';
+          body = `Hola ${pasajero_nombre}, se te ha reservado un asiento en la ruta "${ruta_nombre}" con salida a las ${localTime}.`;
         }
         
         await this.sendExpoPushNotification(push_token, title, body, { reserva_id: reservaId });
