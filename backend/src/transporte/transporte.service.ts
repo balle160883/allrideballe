@@ -357,7 +357,13 @@ export class TransporteService {
     if (result.rows.length === 0) {
       throw new Error('Reserva no encontrada');
     }
-    return result.rows[0];
+    
+    const reserva = result.rows[0];
+    this.notifyPassengerReservaStatus(reservaId, 'aprobada').catch(err => {
+      this.logger.error(`Error al notificar al pasajero de aprobación de reserva #${reservaId}: ${err.message}`);
+    });
+    
+    return reserva;
   }
 
   async rechazarReserva(reservaId: number, approvedBy: string, notas?: string) {
@@ -373,7 +379,52 @@ export class TransporteService {
     if (result.rows.length === 0) {
       throw new Error('Reserva no encontrada');
     }
-    return result.rows[0];
+    
+    const reserva = result.rows[0];
+    this.notifyPassengerReservaStatus(reservaId, 'rechazada').catch(err => {
+      this.logger.error(`Error al notificar al pasajero de rechazo de reserva #${reservaId}: ${err.message}`);
+    });
+    
+    return reserva;
+  }
+
+  private async notifyPassengerReservaStatus(reservaId: number, status: 'aprobada' | 'rechazada') {
+    try {
+      const res = await this.databaseService.query(
+        `SELECT u.push_token, u.nombre as pasajero_nombre, r.nombre as ruta_nombre, v.fecha_hora_salida
+         FROM "reservas" res
+         JOIN "usuarios" u ON res.pasajero_id = u.id
+         JOIN "viajes" v ON res.viaje_id = v.id
+         JOIN "rutas" r ON v.ruta_id = r.id
+         WHERE res.id = $1`,
+        [reservaId]
+      );
+      
+      if (res.rows.length === 0) return;
+      const { push_token, pasajero_nombre, ruta_nombre, fecha_hora_salida } = res.rows[0];
+      
+      if (push_token) {
+        const localTime = new Date(fecha_hora_salida).toLocaleTimeString('en-US', {
+          hour: '2-digit',
+          minute: '2-digit',
+          timeZone: 'America/Mexico_City',
+        });
+        
+        let title = '';
+        let body = '';
+        if (status === 'aprobada') {
+          title = '🎫 Reserva Aprobada';
+          body = `Hola ${pasajero_nombre}, tu reservación para la ruta "${ruta_nombre}" con salida a las ${localTime} ha sido aprobada.`;
+        } else {
+          title = '❌ Reserva Rechazada';
+          body = `Hola ${pasajero_nombre}, tu reservación para la ruta "${ruta_nombre}" con salida a las ${localTime} ha sido rechazada.`;
+        }
+        
+        await this.sendExpoPushNotification(push_token, title, body, { reserva_id: reservaId });
+      }
+    } catch (e: any) {
+      this.logger.error(`Error en notifyPassengerReservaStatus para reserva #${reservaId}: ${e.message}`);
+    }
   }
 
 
@@ -472,7 +523,7 @@ export class TransporteService {
 
       // Buscar pasajeros que tengan reservación para este viaje
       const passengers = await this.databaseService.query(
-        `SELECT u.id, u.nombre, u.email 
+        `SELECT u.id, u.nombre, u.email, u.push_token 
          FROM reservas r
          JOIN usuarios u ON r.pasajero_id = u.id
          WHERE r.viaje_id = $1 AND r.estado = 'reservado'`,
@@ -483,7 +534,12 @@ export class TransporteService {
         this.logger.log(
           `[Notificación de Proximidad] Enviando alerta a ${p.nombre} (${p.email}): El autobús de la ruta "${ruta_nombre}" cruzó "${paradaActualNombre}" y está próximo a su parada "${nextParada.nombre}".`
         );
-        // Simulación de envío: Aquí se llamaría a un servicio Push (como Firebase) o SMS / WhatsApp API
+        
+        if (p.push_token) {
+          const title = '🚌 Autobús Próximo';
+          const body = `Hola ${p.nombre}, el autobús de la ruta "${ruta_nombre}" cruzó "${paradaActualNombre}" y se dirige hacia la parada "${nextParada.nombre}".`;
+          await this.sendExpoPushNotification(p.push_token, title, body, { viaje_id: viajeId });
+        }
       }
     } catch (e: any) {
       this.logger.error(`Error al enviar notificaciones de proximidad: ${e.message}`);
@@ -891,7 +947,11 @@ export class TransporteService {
       const { fecha_hora_salida, ruta_nombre, push_token } = res.rows[0];
       
       if (push_token) {
-        const localTime = new Date(fecha_hora_salida).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        const localTime = new Date(fecha_hora_salida).toLocaleTimeString('en-US', {
+          hour: '2-digit',
+          minute: '2-digit',
+          timeZone: 'America/Mexico_City',
+        });
         const title = '🚌 Nuevo Viaje Asignado';
         const body = `Hola, se te ha asignado la ruta "${ruta_nombre}" con salida a las ${localTime}.`;
         
