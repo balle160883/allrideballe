@@ -18,20 +18,24 @@ import {
   fetchConductores, 
   createConductor, 
   updateConductor, 
-  deleteConductor 
+  deleteConductor,
+  fetchCatalogoProveedores
 } from "@/lib/api";
 
 export default function ConductoresPage() {
   const [conductores, setConductores] = useState<any[]>([]);
+  const [empresas, setEmpresas] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [currentId, setCurrentId] = useState<string | null>(null);
+  const [isGlobalAdmin, setIsGlobalAdmin] = useState(false);
 
   // Form states
   const [nombre, setNombre] = useState("");
   const [email, setEmail] = useState("");
   const [gestorCode, setGestorCode] = useState("");
+  const [proveedorId, setProveedorId] = useState<string>("");
   const [errorMsg, setErrorMsg] = useState("");
   const router = useRouter();
 
@@ -40,6 +44,12 @@ export default function ConductoresPage() {
     if (userInfo) {
       try {
         const user = JSON.parse(userInfo);
+        const globalAdmin = 
+          user.rol === 'admin_cliente' || 
+          user.rol === 'superadmin' ||
+          user.email === 'ing.ballesteros16@gmail.com';
+        setIsGlobalAdmin(globalAdmin);
+
         const isAdmin = 
           user.rol === 'admin' || 
           user.rol === 'admin_cliente' || 
@@ -62,6 +72,19 @@ export default function ConductoresPage() {
     try {
       const data = await fetchConductores();
       setConductores(data);
+
+      const userInfo = localStorage.getItem('user_info');
+      if (userInfo) {
+        const user = JSON.parse(userInfo);
+        const globalAdmin = 
+          user.rol === 'admin_cliente' || 
+          user.rol === 'superadmin' ||
+          user.email === 'ing.ballesteros16@gmail.com';
+        if (globalAdmin) {
+          const provsData = await fetchCatalogoProveedores();
+          setEmpresas(provsData);
+        }
+      }
     } catch (error) {
       console.error("Error loading conductores:", error);
     } finally {
@@ -74,6 +97,7 @@ export default function ConductoresPage() {
     setNombre("");
     setEmail("");
     setGestorCode("");
+    setProveedorId("");
     setErrorMsg("");
     setIsModalOpen(true);
   };
@@ -84,6 +108,7 @@ export default function ConductoresPage() {
     setNombre(conductor.nombre);
     setEmail(conductor.email);
     setGestorCode(conductor.gestor_code || "");
+    setProveedorId(conductor.proveedor_id ? conductor.proveedor_id.toString() : "");
     setErrorMsg("");
     setIsModalOpen(true);
   };
@@ -99,6 +124,7 @@ export default function ConductoresPage() {
       nombre: nombre.trim(),
       email: email.trim().toLowerCase(),
       gestor_code: gestorCode.trim() || null,
+      proveedor_id: proveedorId ? Number(proveedorId) : null
     };
 
     try {
@@ -277,6 +303,22 @@ export default function ConductoresPage() {
                   Código identificador único para el conductor (ej: CONDU01).
                 </span>
               </div>
+
+              {isGlobalAdmin && (
+                <div>
+                  <label className="block text-[10px] font-black uppercase text-slate-400 tracking-wider mb-2">Empresa Transportista (Proveedor)</label>
+                  <select
+                    value={proveedorId}
+                    onChange={(e) => setProveedorId(e.target.value)}
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm font-semibold text-slate-700"
+                  >
+                    <option value="">Selecciona la empresa transportista (Opcional)</option>
+                    {empresas.map((emp) => (
+                      <option key={emp.id} value={emp.id}>{emp.nombre}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               <div className="flex gap-3 mt-6">
                 <button

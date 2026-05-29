@@ -22,15 +22,20 @@ import {
   fetchPasajeros, 
   createPasajero, 
   updatePasajero, 
-  deletePasajero 
+  deletePasajero,
+  fetchCatalogoProveedores,
+  fetchCatalogoSedes
 } from "@/lib/api";
 
 export default function PasajerosPage() {
   const [pasajeros, setPasajeros] = useState<any[]>([]);
+  const [empresas, setEmpresas] = useState<any[]>([]);
+  const [sedes, setSedes] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [currentId, setCurrentId] = useState<string | null>(null);
+  const [isGlobalAdmin, setIsGlobalAdmin] = useState(false);
 
   // Form states
   const [nombre, setNombre] = useState("");
@@ -39,6 +44,8 @@ export default function PasajerosPage() {
   const [direccion, setDireccion] = useState("");
   const [latitud, setLatitud] = useState("");
   const [longitud, setLongitud] = useState("");
+  const [proveedorId, setProveedorId] = useState<string>("");
+  const [sedeId, setSedeId] = useState<string>("");
   const [errorMsg, setErrorMsg] = useState("");
   const router = useRouter();
 
@@ -50,6 +57,12 @@ export default function PasajerosPage() {
     if (userInfo) {
       try {
         const user = JSON.parse(userInfo);
+        const globalAdmin = 
+          user.rol === 'admin_cliente' || 
+          user.rol === 'superadmin' ||
+          user.email === 'ing.ballesteros16@gmail.com';
+        setIsGlobalAdmin(globalAdmin);
+
         const isAdmin = 
           user.rol === 'admin' || 
           user.rol === 'admin_cliente' || 
@@ -72,6 +85,22 @@ export default function PasajerosPage() {
     try {
       const data = await fetchPasajeros();
       setPasajeros(data);
+
+      const sedesData = await fetchCatalogoSedes();
+      setSedes(sedesData);
+
+      const userInfo = localStorage.getItem('user_info');
+      if (userInfo) {
+        const user = JSON.parse(userInfo);
+        const globalAdmin = 
+          user.rol === 'admin_cliente' || 
+          user.rol === 'superadmin' ||
+          user.email === 'ing.ballesteros16@gmail.com';
+        if (globalAdmin) {
+          const provsData = await fetchCatalogoProveedores();
+          setEmpresas(provsData);
+        }
+      }
     } catch (error) {
       console.error("Error loading passengers:", error);
     } finally {
@@ -87,6 +116,8 @@ export default function PasajerosPage() {
     setDireccion("");
     setLatitud("");
     setLongitud("");
+    setProveedorId("");
+    setSedeId("");
     setErrorMsg("");
     setIsModalOpen(true);
   };
@@ -100,6 +131,8 @@ export default function PasajerosPage() {
     setDireccion(pasajero.direccion || "");
     setLatitud(pasajero.latitud !== null && pasajero.latitud !== undefined ? String(pasajero.latitud) : "");
     setLongitud(pasajero.longitud !== null && pasajero.longitud !== undefined ? String(pasajero.longitud) : "");
+    setProveedorId(pasajero.proveedor_id ? pasajero.proveedor_id.toString() : "");
+    setSedeId(pasajero.sede_id ? pasajero.sede_id.toString() : "");
     setErrorMsg("");
     setIsModalOpen(true);
   };
@@ -117,7 +150,9 @@ export default function PasajerosPage() {
       identificador_tarjeta: identificadorTarjeta.trim() || null,
       direccion: direccion.trim() || null,
       latitud: latitud ? Number(latitud) : null,
-      longitud: longitud ? Number(longitud) : null
+      longitud: longitud ? Number(longitud) : null,
+      proveedor_id: proveedorId ? Number(proveedorId) : null,
+      sede_id: sedeId ? Number(sedeId) : null
     };
 
     try {
@@ -319,6 +354,44 @@ export default function PasajerosPage() {
                 <span className="text-[10px] font-bold text-slate-400 block mt-1">
                   Ingresa el código que se codificará en el QR o el ID de la tarjeta física RFID.
                 </span>
+              </div>
+
+              {isGlobalAdmin && (
+                <div>
+                  <label className="block text-[10px] font-black uppercase text-slate-400 tracking-wider mb-2">Empresa Transportista (Proveedor)</label>
+                  <select
+                    value={proveedorId}
+                    onChange={(e) => {
+                      setProveedorId(e.target.value);
+                      setSedeId(""); // reset selected site
+                    }}
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm font-semibold text-slate-700"
+                  >
+                    <option value="">Selecciona la empresa transportista</option>
+                    {empresas.map((emp) => (
+                      <option key={emp.id} value={emp.id}>{emp.nombre}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              <div>
+                <label className="block text-[10px] font-black uppercase text-slate-400 tracking-wider mb-2">Sede Cliente</label>
+                <select
+                  value={sedeId}
+                  onChange={(e) => setSedeId(e.target.value)}
+                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm font-semibold text-slate-700"
+                  required
+                >
+                  <option value="">Selecciona la sede del empleado</option>
+                  {sedes
+                    .filter((s) => !proveedorId || s.proveedor_id === Number(proveedorId))
+                    .map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.nombre} {isGlobalAdmin && s.proveedor_nombre ? `(${s.proveedor_nombre})` : ''}
+                      </option>
+                    ))}
+                </select>
               </div>
 
               <div>

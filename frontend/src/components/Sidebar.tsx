@@ -23,6 +23,7 @@ export function Sidebar({ isOpen, onClose }: { isOpen?: boolean, onClose?: () =>
   const pathname = usePathname();
   const [isMounted, setIsMounted] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isGlobalAdmin, setIsGlobalAdmin] = useState(false);
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   const [isGerente, setIsGerente] = useState(false);
   const [pendingCount, setPendingCount] = useState(0);
@@ -42,6 +43,11 @@ export function Sidebar({ isOpen, onClose }: { isOpen?: boolean, onClose?: () =>
 
         const isGerenteUser = role === 'gerente';
 
+        const isGlobalAdminUser =
+          role === 'admin_cliente' ||
+          superRole ||
+          userEmail === 'ing.ballesteros16@gmail.com';
+
         const isAdminUser = 
           role === 'admin' || 
           role === 'admin_cliente' || 
@@ -50,6 +56,7 @@ export function Sidebar({ isOpen, onClose }: { isOpen?: boolean, onClose?: () =>
           userEmail === 'ing.ballesteros16@gmail.com';
         
         setIsAdmin(isAdminUser);
+        setIsGlobalAdmin(isGlobalAdminUser);
         setIsSuperAdmin(superRole);
         setIsGerente(isGerenteUser);
       } catch (e) {
@@ -106,7 +113,9 @@ export function Sidebar({ isOpen, onClose }: { isOpen?: boolean, onClose?: () =>
     { icon: Route, label: 'Smart Routing 🚀', href: '/admin/rutas/smart', adminOnly: true },
     { icon: Bus, label: 'Vehículos & Flota', href: '/admin/vehiculos', adminOnly: true },
     { icon: Briefcase, label: 'Conductores', href: '/admin/conductores', adminOnly: true },
-    { icon: Building2, label: 'Proveedores', href: '/admin/proveedores', adminOnly: true },
+    { icon: Building2, label: 'Empresas Transportistas', href: '/admin/empresas', globalAdminOnly: true },
+    { icon: Building2, label: 'Clientes & Sedes', href: '/admin/sedes', adminOnly: true },
+    { icon: Users, label: 'Cuentas Proveedores', href: '/admin/proveedores', globalAdminOnly: true },
     { icon: Users, label: 'Pasajeros & Empleados', href: '/admin/pasajeros', adminOnly: true },
     { icon: Calendar, label: 'Viajes & Reservas', href: '/admin/viajes', allowedRoles: ['admin', 'gerente'] },
     { icon: CheckSquare, label: 'Aprobaciones', href: '/admin/aprobaciones', allowedRoles: ['admin', 'gerente'], badge: pendingCount },
@@ -156,6 +165,7 @@ export function Sidebar({ isOpen, onClose }: { isOpen?: boolean, onClose?: () =>
             {menuItems.map((item, index) => {
               if (item.adminOnly && !isAdmin) return null;
               if (item.superOnly && !isSuperAdmin) return null;
+              if (item.globalAdminOnly && !isGlobalAdmin) return null;
               if (item.allowedRoles && !isAdmin && (!isGerente || !item.allowedRoles.includes('gerente'))) return null;
               
               const hasBadge = item.badge !== undefined && item.badge > 0;

@@ -17,21 +17,25 @@ import {
   fetchVehiculos, 
   createVehiculo, 
   updateVehiculo, 
-  deleteVehiculo 
+  deleteVehiculo,
+  fetchCatalogoProveedores
 } from "@/lib/api";
 
 export default function VehiculosPage() {
   const [vehiculos, setVehiculos] = useState<any[]>([]);
+  const [empresas, setEmpresas] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [currentId, setCurrentId] = useState<number | null>(null);
+  const [isGlobalAdmin, setIsGlobalAdmin] = useState(false);
 
   // Form states
   const [patente, setPatente] = useState("");
   const [modelo, setModelo] = useState("");
   const [capacidad, setCapacidad] = useState(30);
   const [proveedorNombre, setProveedorNombre] = useState("");
+  const [proveedorId, setProveedorId] = useState<string>("");
 
   const [errorMsg, setErrorMsg] = useState("");
   const router = useRouter();
@@ -41,6 +45,12 @@ export default function VehiculosPage() {
     if (userInfo) {
       try {
         const user = JSON.parse(userInfo);
+        const globalAdmin = 
+          user.rol === 'admin_cliente' || 
+          user.rol === 'superadmin' ||
+          user.email === 'ing.ballesteros16@gmail.com';
+        setIsGlobalAdmin(globalAdmin);
+
         const isAdmin = 
           user.rol === 'admin' || 
           user.rol === 'admin_cliente' || 
@@ -63,6 +73,19 @@ export default function VehiculosPage() {
     try {
       const data = await fetchVehiculos();
       setVehiculos(data);
+
+      const userInfo = localStorage.getItem('user_info');
+      if (userInfo) {
+        const user = JSON.parse(userInfo);
+        const globalAdmin = 
+          user.rol === 'admin_cliente' || 
+          user.rol === 'superadmin' ||
+          user.email === 'ing.ballesteros16@gmail.com';
+        if (globalAdmin) {
+          const provsData = await fetchCatalogoProveedores();
+          setEmpresas(provsData);
+        }
+      }
     } catch (error) {
       console.error("Error loading vehicles:", error);
     } finally {
@@ -76,6 +99,7 @@ export default function VehiculosPage() {
     setModelo("");
     setCapacidad(30);
     setProveedorNombre("");
+    setProveedorId("");
     setErrorMsg("");
     setIsModalOpen(true);
   };
@@ -87,6 +111,7 @@ export default function VehiculosPage() {
     setModelo(vehiculo.modelo);
     setCapacidad(vehiculo.capacidad);
     setProveedorNombre(vehiculo.proveedor_nombre || "");
+    setProveedorId(vehiculo.proveedor_id ? vehiculo.proveedor_id.toString() : "");
     setErrorMsg("");
     setIsModalOpen(true);
   };
@@ -98,11 +123,20 @@ export default function VehiculosPage() {
       return;
     }
 
+    let finalProveedorNombre = proveedorNombre.trim();
+    if (proveedorId) {
+      const matched = empresas.find(e => e.id === Number(proveedorId));
+      if (matched) {
+        finalProveedorNombre = matched.nombre;
+      }
+    }
+
     const payload = {
       patente: patente.trim().toUpperCase(),
       modelo: modelo.trim(),
       capacidad: Number(capacidad),
-      proveedor_nombre: proveedorNombre.trim()
+      proveedor_nombre: finalProveedorNombre,
+      proveedor_id: proveedorId ? Number(proveedorId) : null
     };
 
     try {
@@ -255,16 +289,33 @@ export default function VehiculosPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-[10px] font-black uppercase text-slate-400 tracking-wider mb-2">Proveedor / Línea</label>
+                  <label className="block text-[10px] font-black uppercase text-slate-400 tracking-wider mb-2">Proveedor / Línea (Nombre Opcional)</label>
                   <input
                     type="text"
                     value={proveedorNombre}
                     onChange={(e) => setProveedorNombre(e.target.value)}
                     placeholder="Ej: Transportes GDL"
                     className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm font-semibold text-slate-700"
+                    disabled={!!proveedorId}
                   />
                 </div>
               </div>
+
+              {isGlobalAdmin && (
+                <div>
+                  <label className="block text-[10px] font-black uppercase text-slate-400 tracking-wider mb-2">Empresa Transportista (Proveedor SaaS)</label>
+                  <select
+                    value={proveedorId}
+                    onChange={(e) => setProveedorId(e.target.value)}
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm font-semibold text-slate-700"
+                  >
+                    <option value="">Selecciona la empresa transportista (Opcional)</option>
+                    {empresas.map((emp) => (
+                      <option key={emp.id} value={emp.id}>{emp.nombre}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               <div className="flex gap-3 mt-6">
                 <button

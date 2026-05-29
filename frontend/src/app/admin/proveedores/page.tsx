@@ -18,11 +18,13 @@ import {
   fetchProveedores, 
   createProveedor, 
   updateProveedor, 
-  deleteProveedor 
+  deleteProveedor,
+  fetchCatalogoProveedores
 } from "@/lib/api";
 
 export default function ProveedoresPage() {
   const [proveedores, setProveedores] = useState<any[]>([]);
+  const [empresas, setEmpresas] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -32,6 +34,7 @@ export default function ProveedoresPage() {
   const [nombre, setNombre] = useState("");
   const [email, setEmail] = useState("");
   const [gestorCode, setGestorCode] = useState("");
+  const [proveedorId, setProveedorId] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
   const router = useRouter();
 
@@ -62,6 +65,9 @@ export default function ProveedoresPage() {
     try {
       const data = await fetchProveedores();
       setProveedores(data);
+      
+      const empresasData = await fetchCatalogoProveedores();
+      setEmpresas(empresasData);
     } catch (error) {
       console.error("Error loading proveedores:", error);
     } finally {
@@ -74,6 +80,7 @@ export default function ProveedoresPage() {
     setNombre("");
     setEmail("");
     setGestorCode("");
+    setProveedorId("");
     setErrorMsg("");
     setIsModalOpen(true);
   };
@@ -84,6 +91,7 @@ export default function ProveedoresPage() {
     setNombre(proveedor.nombre);
     setEmail(proveedor.email);
     setGestorCode(proveedor.gestor_code || "");
+    setProveedorId(proveedor.proveedor_id ? proveedor.proveedor_id.toString() : "");
     setErrorMsg("");
     setIsModalOpen(true);
   };
@@ -99,6 +107,7 @@ export default function ProveedoresPage() {
       nombre: nombre.trim(),
       email: email.trim().toLowerCase(),
       gestor_code: gestorCode.trim() || null,
+      proveedor_id: proveedorId ? Number(proveedorId) : null,
     };
 
     try {
@@ -276,6 +285,21 @@ export default function ProveedoresPage() {
                 <span className="text-[10px] font-bold text-slate-400 block mt-1">
                   Código identificador único para el proveedor (ej: PROV01).
                 </span>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-black uppercase text-slate-400 tracking-wider mb-2">Empresa Relacionada (Inquilino)</label>
+                <select
+                  value={proveedorId}
+                  onChange={(e) => setProveedorId(e.target.value)}
+                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm font-semibold text-slate-700"
+                  required
+                >
+                  <option value="">Selecciona la empresa transportista</option>
+                  {empresas.map((emp) => (
+                    <option key={emp.id} value={emp.id}>{emp.nombre}</option>
+                  ))}
+                </select>
               </div>
 
               <div className="flex gap-3 mt-6">

@@ -17,18 +17,18 @@ export class TransporteController {
   }
 
   @Post('rutas')
-  async createRuta(@Body() data: any) {
-    return this.transporteService.createRuta(data);
+  async createRuta(@Request() req: any, @Body() data: any) {
+    return this.transporteService.createRuta(data, req.user.userId);
   }
 
   @Patch('rutas/:id')
-  async updateRuta(@Param('id') id: string, @Body() data: any) {
-    return this.transporteService.updateRuta(Number(id), data);
+  async updateRuta(@Request() req: any, @Param('id') id: string, @Body() data: any) {
+    return this.transporteService.updateRuta(Number(id), data, req.user.userId);
   }
 
   @Delete('rutas/:id')
-  async deleteRuta(@Param('id') id: string) {
-    return this.transporteService.deleteRuta(Number(id));
+  async deleteRuta(@Request() req: any, @Param('id') id: string) {
+    return this.transporteService.deleteRuta(Number(id), req.user.userId);
   }
 
   // ==========================================
@@ -40,41 +40,41 @@ export class TransporteController {
   }
 
   @Post('vehiculos')
-  async createVehiculo(@Body() data: any) {
-    return this.transporteService.createVehiculo(data);
+  async createVehiculo(@Request() req: any, @Body() data: any) {
+    return this.transporteService.createVehiculo(data, req.user.userId);
   }
 
   @Patch('vehiculos/:id')
-  async updateVehiculo(@Param('id') id: string, @Body() data: any) {
-    return this.transporteService.updateVehiculo(Number(id), data);
+  async updateVehiculo(@Request() req: any, @Param('id') id: string, @Body() data: any) {
+    return this.transporteService.updateVehiculo(Number(id), data, req.user.userId);
   }
 
   @Delete('vehiculos/:id')
-  async deleteVehiculo(@Param('id') id: string) {
-    return this.transporteService.deleteVehiculo(Number(id));
+  async deleteVehiculo(@Request() req: any, @Param('id') id: string) {
+    return this.transporteService.deleteVehiculo(Number(id), req.user.userId);
   }
 
   // ==========================================
   // CONDUCTORES Y PASAJEROS
   // ==========================================
   @Get('conductores')
-  async getConductores() {
-    return this.transporteService.getConductores();
+  async getConductores(@Request() req: any) {
+    return this.transporteService.getConductores(req.user.userId);
   }
 
   @Post('conductores')
-  async createConductor(@Body() data: { email: string; nombre: string; gestor_code?: string }) {
-    return this.transporteService.createConductor(data);
+  async createConductor(@Request() req: any, @Body() data: { email: string; nombre: string; gestor_code?: string }) {
+    return this.transporteService.createConductor(data, req.user.userId);
   }
 
   @Patch('conductores/:id')
-  async updateConductor(@Param('id') id: string, @Body() data: any) {
-    return this.transporteService.updateConductor(id, data);
+  async updateConductor(@Request() req: any, @Param('id') id: string, @Body() data: any) {
+    return this.transporteService.updateConductor(id, data, req.user.userId);
   }
 
   @Delete('conductores/:id')
-  async deleteConductor(@Param('id') id: string) {
-    return this.transporteService.deleteConductor(id);
+  async deleteConductor(@Request() req: any, @Param('id') id: string) {
+    return this.transporteService.deleteConductor(id, req.user.userId);
   }
 
   // ==========================================
@@ -86,7 +86,7 @@ export class TransporteController {
   }
 
   @Post('proveedores')
-  async createAdminProveedor(@Body() data: { email: string; nombre: string; gestor_code?: string }) {
+  async createAdminProveedor(@Body() data: { email: string; nombre: string; gestor_code?: string; proveedor_id?: number }) {
     return this.transporteService.createAdminProveedor(data);
   }
 
@@ -106,23 +106,23 @@ export class TransporteController {
   }
 
   @Get('pasajeros')
-  async getPasajeros() {
-    return this.transporteService.getPasajeros();
+  async getPasajeros(@Request() req: any) {
+    return this.transporteService.getPasajeros(req.user.userId);
   }
 
   @Post('pasajeros')
-  async createPasajero(@Body() data: { email: string; nombre: string; identificador_tarjeta: string }) {
-    return this.transporteService.createPasajero(data);
+  async createPasajero(@Request() req: any, @Body() data: { email: string; nombre: string; identificador_tarjeta: string; sede_id?: number; proveedor_id?: number }) {
+    return this.transporteService.createPasajero(data, req.user.userId);
   }
 
   @Patch('pasajeros/:id')
-  async updatePasajero(@Param('id') id: string, @Body() data: any) {
-    return this.transporteService.updatePasajero(id, data);
+  async updatePasajero(@Request() req: any, @Param('id') id: string, @Body() data: any) {
+    return this.transporteService.updatePasajero(id, data, req.user.userId);
   }
 
   @Delete('pasajeros/:id')
-  async deletePasajero(@Param('id') id: string) {
-    return this.transporteService.deletePasajero(id);
+  async deletePasajero(@Request() req: any, @Param('id') id: string) {
+    return this.transporteService.deletePasajero(id, req.user.userId);
   }
 
   // ==========================================
@@ -130,14 +130,13 @@ export class TransporteController {
   // ==========================================
   @Get('viajes')
   async getViajes(@Request() req: any) {
-    // Si es un conductor, solo cargamos los viajes asignados a él
     const conductorId = req.user.rol === 'conductor' ? req.user.userId : undefined;
     return this.transporteService.getViajes(conductorId, req.user.userId);
   }
 
   @Post('viajes')
-  async createViaje(@Body() data: any) {
-    return this.transporteService.createViaje(data);
+  async createViaje(@Request() req: any, @Body() data: any) {
+    return this.transporteService.createViaje(data, req.user.userId);
   }
 
   @Patch('viajes/:id/estado')
@@ -303,5 +302,51 @@ export class TransporteController {
   @Get('reportes/sla')
   async getAuditoriaSLA() {
     return this.transporteService.getAuditoriaSLA();
+  }
+
+  // ==========================================
+  // CATÁLOGO DE PROVEEDORES (COMPAÑÍAS)
+  // ==========================================
+  @Get('catalogo-proveedores')
+  async getCatalogoProveedores() {
+    return this.transporteService.getCatalogoProveedores();
+  }
+
+  @Post('catalogo-proveedores')
+  async createCatalogoProveedor(@Body() data: { nombre: string }) {
+    return this.transporteService.createCatalogoProveedor(data);
+  }
+
+  @Patch('catalogo-proveedores/:id')
+  async updateCatalogoProveedor(@Param('id') id: string, @Body() data: { nombre: string }) {
+    return this.transporteService.updateCatalogoProveedor(Number(id), data);
+  }
+
+  @Delete('catalogo-proveedores/:id')
+  async deleteCatalogoProveedor(@Param('id') id: string) {
+    return this.transporteService.deleteCatalogoProveedor(Number(id));
+  }
+
+  // ==========================================
+  // CATÁLOGO DE SEDES (EMPRESAS CLIENTES)
+  // ==========================================
+  @Get('catalogo-sedes')
+  async getCatalogoSedes(@Request() req: any) {
+    return this.transporteService.getCatalogoSedes(req.user.userId);
+  }
+
+  @Post('catalogo-sedes')
+  async createCatalogoSede(@Request() req: any, @Body() data: { nombre: string; proveedor_id?: number }) {
+    return this.transporteService.createCatalogoSede(data, req.user.userId);
+  }
+
+  @Patch('catalogo-sedes/:id')
+  async updateCatalogoSede(@Request() req: any, @Param('id') id: string, @Body() data: { nombre: string; proveedor_id?: number }) {
+    return this.transporteService.updateCatalogoSede(Number(id), data, req.user.userId);
+  }
+
+  @Delete('catalogo-sedes/:id')
+  async deleteCatalogoSede(@Request() req: any, @Param('id') id: string) {
+    return this.transporteService.deleteCatalogoSede(Number(id), req.user.userId);
   }
 }

@@ -1,6 +1,7 @@
 import { Controller, Get } from '@nestjs/common';
 import { AppService } from './app.service';
 import { DatabaseService } from './database/database.service';
+import * as bcrypt from 'bcrypt';
 
 @Controller()
 export class AppController {
@@ -12,6 +13,117 @@ export class AppController {
   @Get()
   getHello(): string {
     return this.appService.getHello();
+  }
+
+  @Get('seed-asvi')
+  async seedAsvi() {
+    try {
+      // 1. Asegurar columna proveedor_id en sedes
+      await this.databaseService.query(`
+        ALTER TABLE "sedes" ADD COLUMN IF NOT EXISTS "proveedor_id" INTEGER REFERENCES "proveedores"("id") ON DELETE SET NULL;
+      `);
+
+      // 2. Crear Proveedor
+      let proveedorId: number;
+      const provCheck = await this.databaseService.query('SELECT id FROM "proveedores" WHERE "nombre" = $1', ['Transportes ASVI']);
+      if (provCheck.rows.length > 0) {
+        proveedorId = provCheck.rows[0].id;
+      } else {
+        const provRes = await this.databaseService.query('INSERT INTO "proveedores" ("nombre") VALUES ($1) RETURNING id', ['Transportes ASVI']);
+        proveedorId = provRes.rows[0].id;
+      }
+
+      // 3. Crear Sede
+      let sedeId: number;
+      const sedeCheck = await this.databaseService.query('SELECT id FROM "sedes" WHERE "nombre" = $1', ['Cliente Planta ASVI']);
+      if (sedeCheck.rows.length > 0) {
+        sedeId = sedeCheck.rows[0].id;
+        await this.databaseService.query('UPDATE "sedes" SET "proveedor_id" = $1 WHERE id = $2', [proveedorId, sedeId]);
+      } else {
+        const SedeRes = await this.databaseService.query(
+          'INSERT INTO "sedes" ("nombre", "proveedor_id") VALUES ($1, $2) RETURNING id',
+          ['Cliente Planta ASVI', proveedorId]
+        );
+        sedeId = SedeRes.rows[0].id;
+      }
+
+      // Hashes
+      const hashAdmin = await bcrypt.hash('Proveedor2026@', 10);
+      const hashConductor = await bcrypt.hash('Conductor2026@', 10);
+      const hashPasajero = await bcrypt.hash('Pasajero2026@', 10);
+
+      // 4. Admin
+      const adminCheck = await this.databaseService.query('SELECT id FROM "usuarios" WHERE "email" = $1', ['admin@transportesasvi.com']);
+      if (adminCheck.rows.length > 0) {
+        await this.databaseService.query(`
+          UPDATE "usuarios" 
+          SET "nombre" = $1, "password_hash" = $2, "rol" = $3, "proveedor_id" = $4
+          WHERE "email" = $5
+        `, ['Admin Transportes ASVI', hashAdmin, 'admin_proveedor', proveedorId, 'admin@transportesasvi.com']);
+      } else {
+        await this.databaseService.query(`
+          INSERT INTO "usuarios" ("email", "password_hash", "nombre", "rol", "proveedor_id")
+          VALUES ($1, $2, $3, $4, $5)
+        `, ['admin@transportesasvi.com', hashAdmin, 'Admin Transportes ASVI', 'admin_proveedor', proveedorId]);
+      }
+
+      // 5. Conductor
+      const driverCheck = await this.databaseService.query('SELECT id FROM "usuarios" WHERE "email" = $1', ['conductor.asvi@transportesasvi.com']);
+      if (driverCheck.rows.length > 0) {
+        await this.databaseService.query(`
+          UPDATE "usuarios" 
+          SET "nombre" = $1, "password_hash" = $2, "rol" = $3, "proveedor_id" = $4, "gestor_code" = $5
+          WHERE "email" = $6
+        `, ['Juan Conductor ASVI', hashConductor, 'conductor', proveedorId, 'ASVI_COND_01', 'conductor.asvi@transportesasvi.com']);
+      } else {
+        await this.databaseService.query(`
+          INSERT INTO "usuarios" ("email", "password_hash", "nombre", "rol", "proveedor_id", "gestor_code")
+          VALUES ($1, $2, $3, $4, $5, $6)
+        `, ['conductor.asvi@transportesasvi.com', hashConductor, 'Juan Conductor ASVI', 'conductor', proveedorId, 'ASVI_COND_01']);
+      }
+
+      // 6. Pasajero 1
+      const p1Check = await this.databaseService.query('SELECT id FROM "usuarios" WHERE "email" = $1', ['pasajero1.asvi@transportesasvi.com']);
+      if (p1Check.rows.length > 0) {
+        await this.databaseService.query(`
+          UPDATE "usuarios" 
+          SET "nombre" = $1, "password_hash" = $2, "rol" = $3, "proveedor_id" = $4, "sede_id" = $5, "identificador_tarjeta" = $6
+          WHERE "email" = $7
+        `, ['Pedro Pasajero ASVI', hashPasajero, 'pasajero', proveedorId, sedeId, 'TARJETA-ASVI-01', 'pasajero1.asvi@transportesasvi.com']);
+      } else {
+        await this.databaseService.query(`
+          INSERT INTO "usuarios" ("email", "password_hash", "nombre", "rol", "proveedor_id", "sede_id", "identificador_tarjeta")
+          VALUES ($1, $2, $3, $4, $5, $6, $7)
+        `, ['pasajero1.asvi@transportesasvi.com', hashPasajero, 'Pedro Pasajero ASVI', 'pasajero', proveedorId, sedeId, 'TARJETA-ASVI-01']);
+      }
+
+      // 7. Pasajero 2
+      const p2Check = await this.databaseService.query('SELECT id FROM "usuarios" WHERE "email" = $1', ['pasajero2.asvi@transportesasvi.com']);
+      if (p2Check.rows.length > 0) {
+        await this.databaseService.query(`
+          UPDATE "usuarios" 
+          SET "nombre" = $1, "password_hash" = $2, "rol" = $3, "proveedor_id" = $4, "sede_id" = $5, "identificador_tarjeta" = $6
+          WHERE "email" = $7
+        `, ['Ana Pasajero ASVI', hashPasajero, 'pasajero', proveedorId, sedeId, 'TARJETA-ASVI-02', 'pasajero2.asvi@transportesasvi.com']);
+      } else {
+        await this.databaseService.query(`
+          INSERT INTO "usuarios" ("email", "password_hash", "nombre", "rol", "proveedor_id", "sede_id", "identificador_tarjeta")
+          VALUES ($1, $2, $3, $4, $5, $6, $7)
+        `, ['pasajero2.asvi@transportesasvi.com', hashPasajero, 'Ana Pasajero ASVI', 'pasajero', proveedorId, sedeId, 'TARJETA-ASVI-02']);
+      }
+
+      return {
+        success: true,
+        message: 'Transportes ASVI seeded successfully',
+        proveedorId,
+        sedeId
+      };
+    } catch (e: any) {
+      return {
+        success: false,
+        error: e.message
+      };
+    }
   }
 
   @Get('temp-check-db')

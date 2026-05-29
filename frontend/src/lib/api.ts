@@ -474,3 +474,79 @@ export async function fetchAuditoriaAsistencia(filtros: { rutaId?: number; fecha
   return res.json();
 }
 
+// ==========================================
+// CATÁLOGO DE PROVEEDORES (COMPAÑÍAS)
+// ==========================================
+export async function fetchCatalogoProveedores(): Promise<any[]> {
+  const res = await fetch(`${API_URL}/transporte/catalogo-proveedores`, { headers: getAuthHeader() });
+  if (!res.ok) throw new Error('Failed to fetch catalogo proveedores');
+  return res.json();
+}
+
+export async function createCatalogoProveedor(data: any) {
+  const res = await fetch(`${API_URL}/transporte/catalogo-proveedores`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error('Failed to create catalogo proveedor');
+  return res.json();
+}
+
+export async function updateCatalogoProveedor(id: number, data: any) {
+  const res = await fetch(`${API_URL}/transporte/catalogo-proveedores/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error('Failed to update catalogo proveedor');
+  return res.json();
+}
+
+export async function deleteCatalogoProveedor(id: number) {
+  const res = await fetch(`${API_URL}/transporte/catalogo-proveedores/${id}`, {
+    method: 'DELETE',
+    headers: getAuthHeader(),
+  });
+  if (!res.ok) throw new Error('Failed to delete catalogo proveedor');
+  return res.json();
+}
+
+// ==========================================
+// CATÁLOGO DE SEDES (EMPRESAS CLIENTES)
+// ==========================================
+export async function fetchCatalogoSedes(): Promise<any[]> {
+  const res = await fetch(`${API_URL}/transporte/catalogo-sedes`, { headers: getAuthHeader() });
+  if (!res.ok) throw new Error('Failed to fetch catalogo sedes');
+  return res.json();
+}
+
+export async function createCatalogoSede(data: any) {
+  const res = await fetch(`${API_URL}/transporte/catalogo-sedes`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error('Failed to create catalogo sede');
+  return res.json();
+}
+
+export async function updateCatalogoSede(id: number, data: any) {
+  const res = await fetch(`${API_URL}/transporte/catalogo-sedes/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error('Failed to update catalogo sede');
+  return res.json();
+}
+
+export async function deleteCatalogoSede(id: number) {
+  const res = await fetch(`${API_URL}/transporte/catalogo-sedes/${id}`, {
+    method: 'DELETE',
+    headers: getAuthHeader(),
+  });
+  if (!res.ok) throw new Error('Failed to delete catalogo sede');
+  return res.json();
+}
+

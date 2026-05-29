@@ -15,11 +15,16 @@ export class TransporteService {
     let sql = 'SELECT * FROM "rutas"';
     const params: any[] = [];
     if (userId) {
-      const userRes = await this.databaseService.query('SELECT rol, sede_id FROM "usuarios" WHERE id = $1', [userId]);
+      const userRes = await this.databaseService.query('SELECT rol, sede_id, proveedor_id FROM "usuarios" WHERE id = $1', [userId]);
       const user = userRes.rows[0];
-      if (user && user.sede_id) {
-        sql += ' WHERE "sede_id" = $1 OR "sede_id" IS NULL';
-        params.push(user.sede_id);
+      if (user) {
+        if (user.rol === 'admin_proveedor' && user.proveedor_id) {
+          sql += ' WHERE "sede_id" IN (SELECT id FROM "sedes" WHERE "proveedor_id" = $1)';
+          params.push(user.proveedor_id);
+        } else if (user.sede_id) {
+          sql += ' WHERE "sede_id" = $1 OR "sede_id" IS NULL';
+          params.push(user.sede_id);
+        }
       }
     }
     sql += ' ORDER BY "id" ASC';
@@ -27,23 +32,67 @@ export class TransporteService {
     return result.rows;
   }
 
-  async createRuta(data: { nombre: string; origen: string; destino: string; paradas: any[] }) {
+  async createRuta(data: { nombre: string; origen: string; destino: string; paradas: any[]; sede_id?: number }, creatorId?: string) {
+    let sede_id = data.sede_id || null;
+    if (creatorId) {
+      const userRes = await this.databaseService.query('SELECT rol, proveedor_id FROM "usuarios" WHERE id = $1', [creatorId]);
+      const user = userRes.rows[0];
+      if (user && user.rol === 'admin_proveedor' && user.proveedor_id) {
+        if (sede_id) {
+          const check = await this.databaseService.query('SELECT id FROM "sedes" WHERE id = $1 AND "proveedor_id" = $2', [sede_id, user.proveedor_id]);
+          if (check.rows.length === 0) {
+            throw new Error('La sede especificada no pertenece a tu empresa.');
+          }
+        }
+      }
+    }
     const result = await this.databaseService.query(
-      'INSERT INTO "rutas" ("nombre", "origen", "destino", "paradas") VALUES ($1, $2, $3, $4) RETURNING *',
-      [data.nombre, data.origen, data.destino, JSON.stringify(data.paradas)]
+      'INSERT INTO "rutas" ("nombre", "origen", "destino", "paradas", "sede_id") VALUES ($1, $2, $3, $4, $5) RETURNING *',
+      [data.nombre, data.origen, data.destino, JSON.stringify(data.paradas), sede_id]
     );
     return result.rows[0];
   }
 
-  async updateRuta(id: number, data: { nombre: string; origen: string; destino: string; paradas: any[]; activo: boolean }) {
+  async updateRuta(id: number, data: { nombre: string; origen: string; destino: string; paradas: any[]; activo: boolean; sede_id?: number }, creatorId?: string) {
+    if (creatorId) {
+      const userRes = await this.databaseService.query('SELECT rol, proveedor_id FROM "usuarios" WHERE id = $1', [creatorId]);
+      const user = userRes.rows[0];
+      if (user && user.rol === 'admin_proveedor' && user.proveedor_id) {
+        const routeCheck = await this.databaseService.query(
+          'SELECT sede_id FROM "rutas" WHERE id = $1',
+          [id]
+        );
+        const route = routeCheck.rows[0];
+        if (route && route.sede_id) {
+          const check = await this.databaseService.query('SELECT id FROM "sedes" WHERE id = $1 AND "proveedor_id" = $2', [route.sede_id, user.proveedor_id]);
+          if (check.rows.length === 0) {
+            throw new Error('No tienes permisos para modificar esta ruta.');
+          }
+        }
+      }
+    }
     const result = await this.databaseService.query(
-      'UPDATE "rutas" SET "nombre" = $1, "origen" = $2, "destino" = $3, "paradas" = $4, "activo" = $5 WHERE "id" = $6 RETURNING *',
-      [data.nombre, data.origen, data.destino, JSON.stringify(data.paradas), data.activo, id]
+      'UPDATE "rutas" SET "nombre" = $1, "origen" = $2, "destino" = $3, "paradas" = $4, "activo" = $5, "sede_id" = COALESCE($6, "sede_id") WHERE "id" = $7 RETURNING *',
+      [data.nombre, data.origen, data.destino, JSON.stringify(data.paradas), data.activo, data.sede_id || null, id]
     );
     return result.rows[0];
   }
 
-  async deleteRuta(id: number) {
+  async deleteRuta(id: number, creatorId?: string) {
+    if (creatorId) {
+      const userRes = await this.databaseService.query('SELECT rol, proveedor_id FROM "usuarios" WHERE id = $1', [creatorId]);
+      const user = userRes.rows[0];
+      if (user && user.rol === 'admin_proveedor' && user.proveedor_id) {
+        const routeCheck = await this.databaseService.query('SELECT sede_id FROM "rutas" WHERE id = $1', [id]);
+        const route = routeCheck.rows[0];
+        if (route && route.sede_id) {
+          const check = await this.databaseService.query('SELECT id FROM "sedes" WHERE id = $1 AND "proveedor_id" = $2', [route.sede_id, user.proveedor_id]);
+          if (check.rows.length === 0) {
+            throw new Error('No tienes permisos para eliminar esta ruta.');
+          }
+        }
+      }
+    }
     await this.databaseService.query('DELETE FROM "rutas" WHERE "id" = $1', [id]);
     return { success: true };
   }
@@ -67,23 +116,63 @@ export class TransporteService {
     return result.rows;
   }
 
-  async createVehiculo(data: { patente: string; modelo: string; capacidad: number; proveedor_nombre: string }) {
+  async createVehiculo(data: { patente: string; modelo: string; capacidad: number; proveedor_nombre: string; proveedor_id?: number }, creatorId?: string) {
+    let proveedorId = data.proveedor_id || null;
+    let proveedorNombre = data.proveedor_nombre;
+    if (creatorId) {
+      const userRes = await this.databaseService.query('SELECT rol, proveedor_id, nombre FROM "usuarios" WHERE id = $1', [creatorId]);
+      const user = userRes.rows[0];
+      if (user && user.rol === 'admin_proveedor' && user.proveedor_id) {
+        proveedorId = user.proveedor_id;
+        const provRes = await this.databaseService.query('SELECT nombre FROM "proveedores" WHERE id = $1', [proveedorId]);
+        if (provRes.rows.length > 0) {
+          proveedorNombre = provRes.rows[0].nombre;
+        }
+      }
+    }
     const result = await this.databaseService.query(
-      'INSERT INTO "vehiculos" ("patente", "modelo", "capacidad", "proveedor_nombre") VALUES ($1, $2, $3, $4) RETURNING *',
-      [data.patente, data.modelo, data.capacidad, data.proveedor_nombre]
+      'INSERT INTO "vehiculos" ("patente", "modelo", "capacidad", "proveedor_nombre", "proveedor_id") VALUES ($1, $2, $3, $4, $5) RETURNING *',
+      [data.patente, data.modelo, data.capacidad, proveedorNombre, proveedorId]
     );
     return result.rows[0];
   }
 
-  async updateVehiculo(id: number, data: { patente: string; modelo: string; capacidad: number; proveedor_nombre: string }) {
+  async updateVehiculo(id: number, data: { patente: string; modelo: string; capacidad: number; proveedor_nombre: string; proveedor_id?: number }, creatorId?: string) {
+    let proveedorId = data.proveedor_id || null;
+    let proveedorNombre = data.proveedor_nombre;
+    if (creatorId) {
+      const userRes = await this.databaseService.query('SELECT rol, proveedor_id, nombre FROM "usuarios" WHERE id = $1', [creatorId]);
+      const user = userRes.rows[0];
+      if (user && user.rol === 'admin_proveedor' && user.proveedor_id) {
+        const check = await this.databaseService.query('SELECT proveedor_id FROM "vehiculos" WHERE id = $1', [id]);
+        if (check.rows.length > 0 && check.rows[0].proveedor_id !== user.proveedor_id) {
+          throw new Error('No tienes permisos para modificar este vehículo.');
+        }
+        proveedorId = user.proveedor_id;
+        const provRes = await this.databaseService.query('SELECT nombre FROM "proveedores" WHERE id = $1', [proveedorId]);
+        if (provRes.rows.length > 0) {
+          proveedorNombre = provRes.rows[0].nombre;
+        }
+      }
+    }
     const result = await this.databaseService.query(
-      'UPDATE "vehiculos" SET "patente" = $1, "modelo" = $2, "capacidad" = $3, "proveedor_nombre" = $4 WHERE "id" = $5 RETURNING *',
-      [data.patente, data.modelo, data.capacidad, data.proveedor_nombre, id]
+      'UPDATE "vehiculos" SET "patente" = $1, "modelo" = $2, "capacidad" = $3, "proveedor_nombre" = $4, "proveedor_id" = COALESCE($5, "proveedor_id") WHERE "id" = $6 RETURNING *',
+      [data.patente, data.modelo, data.capacidad, proveedorNombre, proveedorId, id]
     );
     return result.rows[0];
   }
 
-  async deleteVehiculo(id: number) {
+  async deleteVehiculo(id: number, creatorId?: string) {
+    if (creatorId) {
+      const userRes = await this.databaseService.query('SELECT rol, proveedor_id FROM "usuarios" WHERE id = $1', [creatorId]);
+      const user = userRes.rows[0];
+      if (user && user.rol === 'admin_proveedor' && user.proveedor_id) {
+        const check = await this.databaseService.query('SELECT proveedor_id FROM "vehiculos" WHERE id = $1', [id]);
+        if (check.rows.length > 0 && check.rows[0].proveedor_id !== user.proveedor_id) {
+          throw new Error('No tienes permisos para eliminar este vehículo.');
+        }
+      }
+    }
     await this.databaseService.query('DELETE FROM "vehiculos" WHERE "id" = $1', [id]);
     return { success: true };
   }
@@ -91,17 +180,35 @@ export class TransporteService {
   // ==========================================
   // CONDUCTORES Y PASAJEROS (USUARIOS)
   // ==========================================
-  async getConductores() {
-    const result = await this.databaseService.query(
-      'SELECT "id", "email", "nombre", "rol", "gestor_code" FROM "usuarios" WHERE "rol" = \'conductor\' ORDER BY "nombre" ASC'
-    );
+  async getConductores(userId?: string) {
+    let sql = 'SELECT "id", "email", "nombre", "rol", "gestor_code", "proveedor_id" FROM "usuarios" WHERE "rol" = \'conductor\'';
+    const params: any[] = [];
+    if (userId) {
+      const userRes = await this.databaseService.query('SELECT rol, proveedor_id FROM "usuarios" WHERE id = $1', [userId]);
+      const user = userRes.rows[0];
+      if (user && user.rol === 'admin_proveedor' && user.proveedor_id) {
+        sql += ' AND "proveedor_id" = $1';
+        params.push(user.proveedor_id);
+      }
+    }
+    sql += ' ORDER BY "nombre" ASC';
+    const result = await this.databaseService.query(sql, params);
     return result.rows;
   }
 
-  async getPasajeros() {
-    const result = await this.databaseService.query(
-      'SELECT "id", "email", "nombre", "rol", "identificador_tarjeta" FROM "usuarios" WHERE "rol" = \'pasajero\' ORDER BY "nombre" ASC'
-    );
+  async getPasajeros(userId?: string) {
+    let sql = 'SELECT "id", "email", "nombre", "rol", "identificador_tarjeta", "proveedor_id", "sede_id" FROM "usuarios" WHERE "rol" = \'pasajero\'';
+    const params: any[] = [];
+    if (userId) {
+      const userRes = await this.databaseService.query('SELECT rol, proveedor_id FROM "usuarios" WHERE id = $1', [userId]);
+      const user = userRes.rows[0];
+      if (user && user.rol === 'admin_proveedor' && user.proveedor_id) {
+        sql += ' AND "proveedor_id" = $1';
+        params.push(user.proveedor_id);
+      }
+    }
+    sql += ' ORDER BY "nombre" ASC';
+    const result = await this.databaseService.query(sql, params);
     return result.rows;
   }
 
@@ -187,10 +294,33 @@ export class TransporteService {
     return result.rows;
   }
 
-  async createViaje(data: { ruta_id: number; vehiculo_id: number; conductor_id: string; fecha_hora_salida: string }) {
+  async createViaje(data: { ruta_id: number; vehiculo_id: number; conductor_id: string; fecha_hora_salida: string; proveedor_id?: number; sede_id?: number }, creatorId?: string) {
+    let proveedorId = data.proveedor_id || null;
+    let sedeId = data.sede_id || null;
+
+    // 1. Obtener sede_id de la ruta
+    const routeRes = await this.databaseService.query('SELECT "sede_id" FROM "rutas" WHERE "id" = $1', [data.ruta_id]);
+    const route = routeRes.rows[0];
+    if (route && route.sede_id) {
+      sedeId = route.sede_id;
+      // Obtener proveedor_id de la sede
+      const SedeRes = await this.databaseService.query('SELECT "proveedor_id" FROM "sedes" WHERE "id" = $1', [sedeId]);
+      if (SedeRes.rows.length > 0 && SedeRes.rows[0].proveedor_id) {
+        proveedorId = SedeRes.rows[0].proveedor_id;
+      }
+    }
+
+    if (creatorId) {
+      const userRes = await this.databaseService.query('SELECT rol, proveedor_id FROM "usuarios" WHERE id = $1', [creatorId]);
+      const user = userRes.rows[0];
+      if (user && user.rol === 'admin_proveedor' && user.proveedor_id) {
+        proveedorId = user.proveedor_id;
+      }
+    }
+
     const result = await this.databaseService.query(
-      'INSERT INTO "viajes" ("ruta_id", "vehiculo_id", "conductor_id", "fecha_hora_salida") VALUES ($1, $2, $3, $4) RETURNING *',
-      [data.ruta_id, data.vehiculo_id, data.conductor_id, data.fecha_hora_salida]
+      'INSERT INTO "viajes" ("ruta_id", "vehiculo_id", "conductor_id", "fecha_hora_salida", "proveedor_id", "sede_id") VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
+      [data.ruta_id, data.vehiculo_id, data.conductor_id, data.fecha_hora_salida, proveedorId, sedeId]
     );
     const createdViaje = result.rows[0];
     if (createdViaje) {
@@ -690,7 +820,7 @@ export class TransporteService {
     };
   }
 
-  async createPasajero(data: { email: string; nombre: string; identificador_tarjeta: string }) {
+  async createPasajero(data: { email: string; nombre: string; identificador_tarjeta: string; sede_id?: number; proveedor_id?: number }, creatorId?: string) {
     const emailLower = data.email.trim().toLowerCase();
     const emailCheck = await this.databaseService.query(
       'SELECT id FROM "usuarios" WHERE "email" = $1',
@@ -700,17 +830,45 @@ export class TransporteService {
       throw new Error('El correo electrónico ya está registrado.');
     }
 
+    let proveedorId = data.proveedor_id || null;
+    let sedeId = data.sede_id || null;
+
+    if (creatorId) {
+      const userRes = await this.databaseService.query('SELECT rol, proveedor_id FROM "usuarios" WHERE id = $1', [creatorId]);
+      const user = userRes.rows[0];
+      if (user && user.rol === 'admin_proveedor' && user.proveedor_id) {
+        proveedorId = user.proveedor_id;
+        if (sedeId) {
+          const check = await this.databaseService.query('SELECT id FROM "sedes" WHERE id = $1 AND "proveedor_id" = $2', [sedeId, user.proveedor_id]);
+          if (check.rows.length === 0) {
+            throw new Error('La sede especificada no pertenece a tu empresa.');
+          }
+        }
+      }
+    }
+
     const passwordHash = await bcrypt.hash('Pasajero2026@', 10);
 
     const result = await this.databaseService.query(
-      'INSERT INTO "usuarios" ("email", "password_hash", "nombre", "rol", "identificador_tarjeta") VALUES ($1, $2, $3, \'pasajero\', $4) RETURNING "id", "email", "nombre", "rol", "identificador_tarjeta"',
-      [emailLower, passwordHash, data.nombre.trim(), data.identificador_tarjeta?.trim() || null]
+      'INSERT INTO "usuarios" ("email", "password_hash", "nombre", "rol", "identificador_tarjeta", "proveedor_id", "sede_id") VALUES ($1, $2, $3, \'pasajero\', $4, $5, $6) RETURNING "id", "email", "nombre", "rol", "identificador_tarjeta", "proveedor_id", "sede_id"',
+      [emailLower, passwordHash, data.nombre.trim(), data.identificador_tarjeta?.trim() || null, proveedorId, sedeId]
     );
 
     return result.rows[0];
   }
 
-  async updatePasajero(id: string, data: { email?: string; nombre?: string; identificador_tarjeta?: string }) {
+  async updatePasajero(id: string, data: { email?: string; nombre?: string; identificador_tarjeta?: string; sede_id?: number; proveedor_id?: number }, creatorId?: string) {
+    if (creatorId) {
+      const userRes = await this.databaseService.query('SELECT rol, proveedor_id FROM "usuarios" WHERE id = $1', [creatorId]);
+      const user = userRes.rows[0];
+      if (user && user.rol === 'admin_proveedor' && user.proveedor_id) {
+        const check = await this.databaseService.query('SELECT proveedor_id FROM "usuarios" WHERE id = $1 AND "rol" = \'pasajero\'', [id]);
+        if (check.rows.length > 0 && check.rows[0].proveedor_id !== user.proveedor_id) {
+          throw new Error('No tienes permisos para modificar este pasajero.');
+        }
+      }
+    }
+
     if (data.email) {
       const emailLower = data.email.trim().toLowerCase();
       const emailCheck = await this.databaseService.query(
@@ -738,13 +896,21 @@ export class TransporteService {
       fields.push(`"identificador_tarjeta" = $${placeholderIdx++}`);
       values.push(data.identificador_tarjeta?.trim() || null);
     }
+    if (data.sede_id !== undefined) {
+      fields.push(`"sede_id" = $${placeholderIdx++}`);
+      values.push(data.sede_id || null);
+    }
+    if (data.proveedor_id !== undefined) {
+      fields.push(`"proveedor_id" = $${placeholderIdx++}`);
+      values.push(data.proveedor_id || null);
+    }
 
     if (fields.length === 0) {
       throw new Error('No hay campos para actualizar.');
     }
 
     values.push(id);
-    const sql = `UPDATE "usuarios" SET ${fields.join(', ')} WHERE "id" = $${placeholderIdx} RETURNING "id", "email", "nombre", "rol", "identificador_tarjeta"`;
+    const sql = `UPDATE "usuarios" SET ${fields.join(', ')} WHERE "id" = $${placeholderIdx} RETURNING "id", "email", "nombre", "rol", "identificador_tarjeta", "proveedor_id", "sede_id"`;
     const result = await this.databaseService.query(sql, values);
 
     if (result.rows.length === 0) {
@@ -754,7 +920,17 @@ export class TransporteService {
     return result.rows[0];
   }
 
-  async deletePasajero(id: string) {
+  async deletePasajero(id: string, creatorId?: string) {
+    if (creatorId) {
+      const userRes = await this.databaseService.query('SELECT rol, proveedor_id FROM "usuarios" WHERE id = $1', [creatorId]);
+      const user = userRes.rows[0];
+      if (user && user.rol === 'admin_proveedor' && user.proveedor_id) {
+        const check = await this.databaseService.query('SELECT proveedor_id FROM "usuarios" WHERE id = $1 AND "rol" = \'pasajero\'', [id]);
+        if (check.rows.length > 0 && check.rows[0].proveedor_id !== user.proveedor_id) {
+          throw new Error('No tienes permisos para eliminar este pasajero.');
+        }
+      }
+    }
     const result = await this.databaseService.query(
       'DELETE FROM "usuarios" WHERE "id" = $1 AND "rol" = \'pasajero\' RETURNING *',
       [id]
@@ -765,7 +941,7 @@ export class TransporteService {
     return { success: true, message: 'Pasajero eliminado correctamente.' };
   }
 
-  async createConductor(data: { email: string; nombre: string; gestor_code?: string }) {
+  async createConductor(data: { email: string; nombre: string; gestor_code?: string; proveedor_id?: number }, creatorId?: string) {
     const emailLower = data.email.trim().toLowerCase();
     const emailCheck = await this.databaseService.query(
       'SELECT id FROM "usuarios" WHERE "email" = $1',
@@ -775,17 +951,37 @@ export class TransporteService {
       throw new Error('El correo electrónico ya está registrado.');
     }
 
+    let proveedorId = data.proveedor_id || null;
+    if (creatorId) {
+      const userRes = await this.databaseService.query('SELECT rol, proveedor_id FROM "usuarios" WHERE id = $1', [creatorId]);
+      const user = userRes.rows[0];
+      if (user && user.rol === 'admin_proveedor' && user.proveedor_id) {
+        proveedorId = user.proveedor_id;
+      }
+    }
+
     const passwordHash = await bcrypt.hash('Conductor2026@', 10);
 
     const result = await this.databaseService.query(
-      'INSERT INTO "usuarios" ("email", "password_hash", "nombre", "rol", "gestor_code") VALUES ($1, $2, $3, \'conductor\', $4) RETURNING "id", "email", "nombre", "rol", "gestor_code"',
-      [emailLower, passwordHash, data.nombre.trim(), data.gestor_code?.trim() || null]
+      'INSERT INTO "usuarios" ("email", "password_hash", "nombre", "rol", "gestor_code", "proveedor_id") VALUES ($1, $2, $3, \'conductor\', $4, $5) RETURNING "id", "email", "nombre", "rol", "gestor_code", "proveedor_id"',
+      [emailLower, passwordHash, data.nombre.trim(), data.gestor_code?.trim() || null, proveedorId]
     );
 
     return result.rows[0];
   }
 
-  async updateConductor(id: string, data: { email?: string; nombre?: string; gestor_code?: string }) {
+  async updateConductor(id: string, data: { email?: string; nombre?: string; gestor_code?: string; proveedor_id?: number }, creatorId?: string) {
+    if (creatorId) {
+      const userRes = await this.databaseService.query('SELECT rol, proveedor_id FROM "usuarios" WHERE id = $1', [creatorId]);
+      const user = userRes.rows[0];
+      if (user && user.rol === 'admin_proveedor' && user.proveedor_id) {
+        const check = await this.databaseService.query('SELECT proveedor_id FROM "usuarios" WHERE id = $1 AND "rol" = \'conductor\'', [id]);
+        if (check.rows.length > 0 && check.rows[0].proveedor_id !== user.proveedor_id) {
+          throw new Error('No tienes permisos para modificar este conductor.');
+        }
+      }
+    }
+
     if (data.email) {
       const emailLower = data.email.trim().toLowerCase();
       const emailCheck = await this.databaseService.query(
@@ -813,13 +1009,17 @@ export class TransporteService {
       fields.push(`"gestor_code" = $${placeholderIdx++}`);
       values.push(data.gestor_code?.trim() || null);
     }
+    if (data.proveedor_id !== undefined) {
+      fields.push(`"proveedor_id" = $${placeholderIdx++}`);
+      values.push(data.proveedor_id || null);
+    }
 
     if (fields.length === 0) {
       throw new Error('No hay campos para actualizar.');
     }
 
     values.push(id);
-    const sql = `UPDATE "usuarios" SET ${fields.join(', ')} WHERE "id" = $${placeholderIdx} AND "rol" = 'conductor' RETURNING "id", "email", "nombre", "rol", "gestor_code"`;
+    const sql = `UPDATE "usuarios" SET ${fields.join(', ')} WHERE "id" = $${placeholderIdx} AND "rol" = 'conductor' RETURNING "id", "email", "nombre", "rol", "gestor_code", "proveedor_id"`;
     const result = await this.databaseService.query(sql, values);
 
     if (result.rows.length === 0) {
@@ -829,7 +1029,17 @@ export class TransporteService {
     return result.rows[0];
   }
 
-  async deleteConductor(id: string) {
+  async deleteConductor(id: string, creatorId?: string) {
+    if (creatorId) {
+      const userRes = await this.databaseService.query('SELECT rol, proveedor_id FROM "usuarios" WHERE id = $1', [creatorId]);
+      const user = userRes.rows[0];
+      if (user && user.rol === 'admin_proveedor' && user.proveedor_id) {
+        const check = await this.databaseService.query('SELECT proveedor_id FROM "usuarios" WHERE id = $1 AND "rol" = \'conductor\'', [id]);
+        if (check.rows.length > 0 && check.rows[0].proveedor_id !== user.proveedor_id) {
+          throw new Error('No tienes permisos para eliminar este conductor.');
+        }
+      }
+    }
     const result = await this.databaseService.query(
       'DELETE FROM "usuarios" WHERE "id" = $1 AND "rol" = \'conductor\' RETURNING *',
       [id]
@@ -842,12 +1052,12 @@ export class TransporteService {
 
   async getAdminProveedores() {
     const result = await this.databaseService.query(
-      'SELECT "id", "email", "nombre", "rol", "gestor_code" FROM "usuarios" WHERE "rol" = \'admin_proveedor\' ORDER BY "nombre" ASC'
+      'SELECT "id", "email", "nombre", "rol", "gestor_code", "proveedor_id" FROM "usuarios" WHERE "rol" = \'admin_proveedor\' ORDER BY "nombre" ASC'
     );
     return result.rows;
   }
 
-  async createAdminProveedor(data: { email: string; nombre: string; gestor_code?: string }) {
+  async createAdminProveedor(data: { email: string; nombre: string; gestor_code?: string; proveedor_id?: number }) {
     const emailLower = data.email.trim().toLowerCase();
     const emailCheck = await this.databaseService.query(
       'SELECT id FROM "usuarios" WHERE "email" = $1',
@@ -858,16 +1068,17 @@ export class TransporteService {
     }
 
     const passwordHash = await bcrypt.hash('Proveedor2026@', 10);
+    const proveedorId = data.proveedor_id || null;
 
     const result = await this.databaseService.query(
-      'INSERT INTO "usuarios" ("email", "password_hash", "nombre", "rol", "gestor_code") VALUES ($1, $2, $3, \'admin_proveedor\', $4) RETURNING "id", "email", "nombre", "rol", "gestor_code"',
-      [emailLower, passwordHash, data.nombre.trim(), data.gestor_code?.trim() || null]
+      'INSERT INTO "usuarios" ("email", "password_hash", "nombre", "rol", "gestor_code", "proveedor_id") VALUES ($1, $2, $3, \'admin_proveedor\', $4, $5) RETURNING "id", "email", "nombre", "rol", "gestor_code", "proveedor_id"',
+      [emailLower, passwordHash, data.nombre.trim(), data.gestor_code?.trim() || null, proveedorId]
     );
 
     return result.rows[0];
   }
 
-  async updateAdminProveedor(id: string, data: { email?: string; nombre?: string; gestor_code?: string }) {
+  async updateAdminProveedor(id: string, data: { email?: string; nombre?: string; gestor_code?: string; proveedor_id?: number }) {
     if (data.email) {
       const emailLower = data.email.trim().toLowerCase();
       const emailCheck = await this.databaseService.query(
@@ -895,13 +1106,17 @@ export class TransporteService {
       fields.push(`"gestor_code" = $${placeholderIdx++}`);
       values.push(data.gestor_code?.trim() || null);
     }
+    if (data.proveedor_id !== undefined) {
+      fields.push(`"proveedor_id" = $${placeholderIdx++}`);
+      values.push(data.proveedor_id || null);
+    }
 
     if (fields.length === 0) {
       throw new Error('No hay campos para actualizar.');
     }
 
     values.push(id);
-    const sql = `UPDATE "usuarios" SET ${fields.join(', ')} WHERE "id" = $${placeholderIdx} AND "rol" = 'admin_proveedor' RETURNING "id", "email", "nombre", "rol", "gestor_code"`;
+    const sql = `UPDATE "usuarios" SET ${fields.join(', ')} WHERE "id" = $${placeholderIdx} AND "rol" = 'admin_proveedor' RETURNING "id", "email", "nombre", "rol", "gestor_code", "proveedor_id"`;
     const result = await this.databaseService.query(sql, values);
 
     if (result.rows.length === 0) {
@@ -1613,6 +1828,120 @@ export class TransporteService {
     } finally {
       client.release();
     }
+  }
+
+  // ==========================================
+  // CATÁLOGO DE PROVEEDORES (COMPAÑÍAS)
+  // ==========================================
+  async getCatalogoProveedores() {
+    const result = await this.databaseService.query(
+      'SELECT id, nombre, created_at FROM "proveedores" ORDER BY nombre ASC'
+    );
+    return result.rows;
+  }
+
+  async createCatalogoProveedor(data: { nombre: string }) {
+    const result = await this.databaseService.query(
+      'INSERT INTO "proveedores" ("nombre") VALUES ($1) RETURNING *',
+      [data.nombre.trim()]
+    );
+    return result.rows[0];
+  }
+
+  async updateCatalogoProveedor(id: number, data: { nombre: string }) {
+    const result = await this.databaseService.query(
+      'UPDATE "proveedores" SET "nombre" = $1 WHERE "id" = $2 RETURNING *',
+      [data.nombre.trim(), id]
+    );
+    return result.rows[0];
+  }
+
+  async deleteCatalogoProveedor(id: number) {
+    await this.databaseService.query('DELETE FROM "proveedores" WHERE "id" = $1', [id]);
+    return { success: true };
+  }
+
+  // ==========================================
+  // CATÁLOGO DE SEDES (EMPRESAS CLIENTES)
+  // ==========================================
+  async getCatalogoSedes(userId?: string) {
+    let sql = 'SELECT s.id, s.nombre, s.created_at, s.proveedor_id, p.nombre AS proveedor_nombre FROM "sedes" s LEFT JOIN "proveedores" p ON s.proveedor_id = p.id';
+    const params: any[] = [];
+    if (userId) {
+      const userRes = await this.databaseService.query('SELECT rol, proveedor_id FROM "usuarios" WHERE id = $1', [userId]);
+      const user = userRes.rows[0];
+      if (user && user.rol === 'admin_proveedor' && user.proveedor_id) {
+        sql += ' WHERE s.proveedor_id = $1';
+        params.push(user.proveedor_id);
+      }
+    }
+    sql += ' ORDER BY s.nombre ASC';
+    const result = await this.databaseService.query(sql, params);
+    return result.rows;
+  }
+
+  async createCatalogoSede(data: { nombre: string; proveedor_id?: number }, creatorId?: string) {
+    let proveedorId = data.proveedor_id || null;
+    if (creatorId) {
+      const userRes = await this.databaseService.query('SELECT rol, proveedor_id FROM "usuarios" WHERE id = $1', [creatorId]);
+      const user = userRes.rows[0];
+      if (user && user.rol === 'admin_proveedor' && user.proveedor_id) {
+        proveedorId = user.proveedor_id;
+      }
+    }
+    const result = await this.databaseService.query(
+      'INSERT INTO "sedes" ("nombre", "proveedor_id") VALUES ($1, $2) RETURNING *',
+      [data.nombre.trim(), proveedorId]
+    );
+    return result.rows[0];
+  }
+
+  async updateCatalogoSede(id: number, data: { nombre: string; proveedor_id?: number }, creatorId?: string) {
+    let proveedorId = data.proveedor_id;
+    if (creatorId) {
+      const userRes = await this.databaseService.query('SELECT rol, proveedor_id FROM "usuarios" WHERE id = $1', [creatorId]);
+      const user = userRes.rows[0];
+      if (user && user.rol === 'admin_proveedor' && user.proveedor_id) {
+        const check = await this.databaseService.query('SELECT proveedor_id FROM "sedes" WHERE id = $1', [id]);
+        if (check.rows.length > 0 && check.rows[0].proveedor_id !== user.proveedor_id) {
+          throw new Error('No tienes permisos para modificar esta sede.');
+        }
+        proveedorId = user.proveedor_id;
+      }
+    }
+
+    const fields: string[] = [];
+    const values: any[] = [];
+    let placeholderIdx = 1;
+
+    if (data.nombre !== undefined) {
+      fields.push(`"nombre" = $${placeholderIdx++}`);
+      values.push(data.nombre.trim());
+    }
+    if (proveedorId !== undefined) {
+      fields.push(`"proveedor_id" = $${placeholderIdx++}`);
+      values.push(proveedorId);
+    }
+
+    values.push(id);
+    const sql = `UPDATE "sedes" SET ${fields.join(', ')} WHERE "id" = $${placeholderIdx} RETURNING *`;
+    const result = await this.databaseService.query(sql, values);
+    return result.rows[0];
+  }
+
+  async deleteCatalogoSede(id: number, creatorId?: string) {
+    if (creatorId) {
+      const userRes = await this.databaseService.query('SELECT rol, proveedor_id FROM "usuarios" WHERE id = $1', [creatorId]);
+      const user = userRes.rows[0];
+      if (user && user.rol === 'admin_proveedor' && user.proveedor_id) {
+        const check = await this.databaseService.query('SELECT proveedor_id FROM "sedes" WHERE id = $1', [id]);
+        if (check.rows.length > 0 && check.rows[0].proveedor_id !== user.proveedor_id) {
+          throw new Error('No tienes permisos para eliminar esta sede.');
+        }
+      }
+    }
+    await this.databaseService.query('DELETE FROM "sedes" WHERE "id" = $1', [id]);
+    return { success: true };
   }
 }
 

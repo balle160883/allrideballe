@@ -13,7 +13,7 @@ export class AuthService {
   async validateUser(email: string, pass: string): Promise<any> {
     try {
       const result = await this.databaseService.query(
-        'SELECT id, email, password_hash, nombre, rol, identificador_tarjeta, gestor_code AS gestor FROM usuarios WHERE email = $1',
+        'SELECT id, email, password_hash, nombre, rol, identificador_tarjeta, gestor_code AS gestor, proveedor_id, sede_id FROM usuarios WHERE email = $1',
         [email]
       );
 
@@ -66,7 +66,9 @@ export class AuthService {
         id: user.id,
         email: user.email,
         gestor: user.gestor,
-        rol: effectiveRole
+        rol: user.rol, // Return actual role ('admin_cliente', 'admin_proveedor', etc.)
+        proveedor_id: user.proveedor_id,
+        sede_id: user.sede_id
       }
     };
   }

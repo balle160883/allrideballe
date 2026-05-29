@@ -17,21 +17,25 @@ import {
   fetchRutas, 
   createRuta, 
   updateRuta, 
-  deleteRuta 
+  deleteRuta,
+  fetchCatalogoSedes
 } from "@/lib/api";
 
 export default function RutasPage() {
   const [rutas, setRutas] = useState<any[]>([]);
+  const [sedes, setSedes] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [currentId, setCurrentId] = useState<number | null>(null);
+  const [isGlobalAdmin, setIsGlobalAdmin] = useState(false);
 
   // Form states
   const [nombre, setNombre] = useState("");
   const [origen, setOrigen] = useState("");
   const [destino, setDestino] = useState("");
   const [activo, setActivo] = useState(true);
+  const [sedeId, setSedeId] = useState<string>("");
   
   // Paradas management
   const [paradas, setParadas] = useState<any[]>([]);
@@ -47,6 +51,12 @@ export default function RutasPage() {
     if (userInfo) {
       try {
         const user = JSON.parse(userInfo);
+        const globalAdmin = 
+          user.rol === 'admin_cliente' || 
+          user.rol === 'superadmin' ||
+          user.email === 'ing.ballesteros16@gmail.com';
+        setIsGlobalAdmin(globalAdmin);
+
         const isAdmin = 
           user.rol === 'admin' || 
           user.rol === 'admin_cliente' || 
@@ -69,6 +79,9 @@ export default function RutasPage() {
     try {
       const data = await fetchRutas();
       setRutas(data);
+
+      const sedesData = await fetchCatalogoSedes();
+      setSedes(sedesData);
     } catch (error) {
       console.error("Error loading routes:", error);
     } finally {
@@ -82,6 +95,7 @@ export default function RutasPage() {
     setOrigen("");
     setDestino("");
     setActivo(true);
+    setSedeId("");
     setParadas([]);
     setTempParadaNombre("");
     setTempParadaLat("");
@@ -97,6 +111,7 @@ export default function RutasPage() {
     setOrigen(ruta.origen);
     setDestino(ruta.destino);
     setActivo(ruta.activo);
+    setSedeId(ruta.sede_id ? ruta.sede_id.toString() : "");
     setParadas(Array.isArray(ruta.paradas) ? ruta.paradas : []);
     setTempParadaNombre("");
     setTempParadaLat("");
@@ -139,7 +154,8 @@ export default function RutasPage() {
       origen,
       destino,
       paradas,
-      activo
+      activo,
+      sede_id: sedeId ? Number(sedeId) : null
     };
 
     try {
@@ -293,18 +309,35 @@ export default function RutasPage() {
                     className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm font-semibold text-slate-700"
                   />
                 </div>
-                <div className="flex items-center mt-6">
-                  <label className="inline-flex items-center cursor-pointer">
-                    <input 
-                      type="checkbox" 
-                      checked={activo} 
-                      onChange={(e) => setActivo(e.target.checked)} 
-                      className="sr-only peer"
-                    />
-                    <div className="relative w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                    <span className="ms-3 text-sm font-bold text-slate-700">Ruta Habilitada / Activa</span>
-                  </label>
+                <div>
+                  <label className="block text-[10px] font-black uppercase text-slate-400 tracking-wider mb-2">Sede Cliente</label>
+                  <select
+                    value={sedeId}
+                    onChange={(e) => setSedeId(e.target.value)}
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm font-semibold text-slate-700"
+                    required
+                  >
+                    <option value="">Selecciona la sede cliente</option>
+                    {sedes.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.nombre} {isGlobalAdmin && s.proveedor_nombre ? `(${s.proveedor_nombre})` : ''}
+                      </option>
+                    ))}
+                  </select>
                 </div>
+              </div>
+
+              <div>
+                <label className="inline-flex items-center cursor-pointer mt-2">
+                  <input 
+                    type="checkbox" 
+                    checked={activo} 
+                    onChange={(e) => setActivo(e.target.checked)} 
+                    className="sr-only peer"
+                  />
+                  <div className="relative w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                  <span className="ms-3 text-sm font-bold text-slate-700">Ruta Habilitada / Activa</span>
+                </label>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
