@@ -65,6 +65,10 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
         -- Agregar columna para tokens de notificación push
         ALTER TABLE "usuarios" ADD COLUMN IF NOT EXISTS "push_token" VARCHAR(255);
 
+        -- Agregar columnas para restablecimiento de contraseña
+        ALTER TABLE "usuarios" ADD COLUMN IF NOT EXISTS "reset_password_token" VARCHAR(255);
+        ALTER TABLE "usuarios" ADD COLUMN IF NOT EXISTS "reset_password_expires" TIMESTAMP;
+
         -- Alterar constraint de estado en reservas para nuevos estados de aprobación
         ALTER TABLE "reservas" DROP CONSTRAINT IF EXISTS "reservas_estado_check";
         ALTER TABLE "reservas" ADD CONSTRAINT "reservas_estado_check" CHECK ("estado" IN ('pendiente_aprobacion', 'reservado', 'confirmado', 'no_abordado', 'cancelado', 'rechazado'));

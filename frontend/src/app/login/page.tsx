@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { login } from '@/lib/api';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -53,7 +54,15 @@ export default function LoginPage() {
           </div>
 
           <div className="space-y-2">
-            <label className="text-sm font-medium text-slate-300 ml-1">Contraseña</label>
+            <div className="flex justify-between items-center ml-1">
+              <label className="text-sm font-medium text-slate-300">Contraseña</label>
+              <Link 
+                href="/forgot-password" 
+                className="text-xs text-blue-400 hover:text-blue-300 font-semibold transition-all"
+              >
+                ¿Olvidaste tu contraseña?
+              </Link>
+            </div>
             <input
               type="password"
               required
