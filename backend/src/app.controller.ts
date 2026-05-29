@@ -135,7 +135,7 @@ export class AppController {
       
       let users: any[] = [];
       try {
-        const uResult = await this.databaseService.query('SELECT email, rol, nombre, reset_password_token, reset_password_expires FROM usuarios');
+        const uResult = await this.databaseService.query('SELECT email, rol, nombre FROM usuarios');
         users = uResult.rows;
       } catch (e: any) {
         users = [e.message];
