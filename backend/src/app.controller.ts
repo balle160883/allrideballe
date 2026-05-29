@@ -15,7 +15,8 @@ export class AppController {
     return this.appService.getHello();
   }
 
-  @Get('seed-asvi')
+  // Seeding completed successfully. Endpoint disabled to prevent unauthorized runs in production.
+  // @Get('seed-asvi')
   async seedAsvi() {
     try {
       // 1. Asegurar columna proveedor_id en sedes
