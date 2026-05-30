@@ -3,7 +3,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
-import { fetchLatestLocations } from '@/lib/api';
+import { fetchLatestLocations, fetchViajes } from '@/lib/api';
 import { MapPin, User, Clock, Navigation, Bus, Route } from 'lucide-react';
 
 // Token de Mapbox
@@ -26,6 +26,146 @@ export default function FleetMapPage() {
   const markers = useRef<Map<number, mapboxgl.Marker>>(new Map());
   const [locations, setLocations] = useState<VehicleLocation[]>([]);
   const [loading, setLoading] = useState(true);
+  const [viajes, setViajes] = useState<any[]>([]);
+  const [selectedViajeId, setSelectedViajeId] = useState<number | null>(null);
+  const stopMarkers = useRef<mapboxgl.Marker[]>([]);
+  
+  const viajesRef = useRef<any[]>([]);
+  const locationsRef = useRef<any[]>([]);
+
+  useEffect(() => {
+    viajesRef.current = viajes;
+  }, [viajes]);
+
+  useEffect(() => {
+    locationsRef.current = locations;
+  }, [locations]);
+
+  useEffect(() => {
+    const loadViajes = async () => {
+      try {
+        const data = await fetchViajes();
+        setViajes(data);
+      } catch (err) {
+        console.error('Error loading trips:', err);
+      }
+    };
+    loadViajes();
+  }, []);
+
+  const drawRoute = (viajeId: number | null) => {
+    if (!map.current) return;
+
+    // 1. Clear existing stop markers
+    stopMarkers.current.forEach(m => m.remove());
+    stopMarkers.current = [];
+
+    // 2. Remove existing route source and layer if null is passed
+    if (viajeId === null) {
+      if (map.current.getLayer('route-line')) map.current.removeLayer('route-line');
+      if (map.current.getSource('route-source')) map.current.removeSource('route-source');
+      return;
+    }
+
+    // 3. Find the selected trip details
+    const viaje = viajesRef.current.find((v: any) => v.id === viajeId);
+    const loc = locationsRef.current.find((l: any) => l.viaje_id === viajeId);
+    
+    if (!viaje || !viaje.paradas || viaje.paradas.length === 0) {
+      if (map.current.getLayer('route-line')) map.current.removeLayer('route-line');
+      if (map.current.getSource('route-source')) map.current.removeSource('route-source');
+      return;
+    }
+
+    // 4. Extract stops coordinates [longitude, latitude]
+    const coordinates = [...viaje.paradas]
+      .sort((a: any, b: any) => a.orden - b.orden)
+      .map((p: any) => [Number(p.longitud), Number(p.latitud)]);
+
+    // 5. Draw route line in Mapbox
+    if (map.current.getSource('route-source')) {
+      (map.current.getSource('route-source') as mapboxgl.GeoJSONSource).setData({
+        type: 'Feature',
+        properties: {},
+        geometry: {
+          type: 'LineString',
+          coordinates: coordinates
+        }
+      });
+    } else {
+      map.current.addSource('route-source', {
+        type: 'geojson',
+        data: {
+          type: 'Feature',
+          properties: {},
+          geometry: {
+            type: 'LineString',
+            coordinates: coordinates
+          }
+        }
+      });
+
+      map.current.addLayer({
+        id: 'route-line',
+        type: 'line',
+        source: 'route-source',
+        layout: {
+          'line-join': 'round',
+          'line-cap': 'round'
+        },
+        paint: {
+          'line-color': '#2563eb', // Blue-600
+          'line-width': 5,
+          'line-opacity': 0.8
+        }
+      });
+    }
+
+    // 6. Draw stops markers
+    viaje.paradas.forEach((parada: any) => {
+      const el = document.createElement('div');
+      el.className = 'stop-marker';
+      el.style.width = '24px';
+      el.style.height = '24px';
+      el.style.borderRadius = '50%';
+      el.style.backgroundColor = '#10b981'; // Green-500
+      el.style.border = '2px solid white';
+      el.style.boxShadow = '0 0 10px rgba(16, 185, 129, 0.8)';
+      el.style.display = 'flex';
+      el.style.alignItems = 'center';
+      el.style.justifyContent = 'center';
+      el.style.cursor = 'pointer';
+      el.style.zIndex = '5';
+      el.innerHTML = `<span style="color: white; font-size: 10px; font-weight: 800;">${parada.orden}</span>`;
+
+      const popup = new mapboxgl.Popup({ offset: 15 })
+        .setHTML(`
+          <div style="color: #0f172a; padding: 4px; font-family: sans-serif; font-size: 11px;">
+            <strong style="color: #059669; font-size: 12px;">Parada ${parada.orden}</strong>
+            <p style="margin: 2px 0 0 0; font-weight: 600;">${parada.nombre}</p>
+          </div>
+        `);
+
+      const marker = new mapboxgl.Marker(el)
+        .setLngLat([Number(parada.longitud), Number(parada.latitud)])
+        .setPopup(popup)
+        .addTo(map.current!);
+
+      stopMarkers.current.push(marker);
+    });
+
+    // 7. Fit bounds to show route and vehicle
+    const bounds = new mapboxgl.LngLatBounds();
+    if (loc) {
+      bounds.extend([loc.longitud, loc.latitud]);
+    }
+    coordinates.forEach((c: number[]) => bounds.extend(c as [number, number]));
+    map.current.fitBounds(bounds, { padding: 80, maxZoom: 15 });
+  };
+
+  useEffect(() => {
+    drawRoute(selectedViajeId);
+  }, [selectedViajeId, viajes]);
 
   useEffect(() => {
     if (!mapContainer.current) return;
@@ -99,6 +239,10 @@ export default function FleetMapPage() {
                   </div>
                 `);
 
+              el.addEventListener('click', () => {
+                setSelectedViajeId(loc.viaje_id);
+              });
+
               const marker = new mapboxgl.Marker(el)
                 .setLngLat([loc.longitud, loc.latitud])
                 .setPopup(popup)
@@ -119,6 +263,7 @@ export default function FleetMapPage() {
 
     return () => {
       clearInterval(interval);
+      stopMarkers.current.forEach(m => m.remove());
       map.current?.remove();
     };
   }, []);
@@ -156,15 +301,25 @@ export default function FleetMapPage() {
               locations.map((loc) => (
                 <button
                   key={loc.viaje_id}
-                  onClick={() => map.current?.flyTo({ center: [loc.longitud, loc.latitud], zoom: 15 })}
-                  className="w-full p-3 rounded-xl hover:bg-slate-50 border border-transparent hover:border-slate-100 transition-all text-left flex items-start gap-3"
+                  onClick={() => {
+                    setSelectedViajeId(loc.viaje_id);
+                    map.current?.flyTo({ center: [loc.longitud, loc.latitud], zoom: 15 });
+                  }}
+                  className={`w-full p-3 rounded-xl border transition-all text-left flex items-start gap-3 ${
+                    selectedViajeId === loc.viaje_id
+                      ? 'bg-blue-50/80 border-blue-200'
+                      : 'bg-white border-transparent hover:bg-slate-50 hover:border-slate-100'
+                  }`}
                 >
                   <div className="bg-blue-100 p-2.5 rounded-xl text-blue-600">
                     <Bus size={18} />
                   </div>
                   <div className="flex-1 overflow-hidden">
                     <p className="font-extrabold text-slate-900 truncate leading-snug">{loc.ruta_nombre}</p>
-                    <p className="text-xs text-slate-500 font-bold mt-0.5">Unidad: {loc.patente} ({loc.velocidad || 0} km/h)</p>
+                    <p className="text-xs text-slate-600 font-extrabold mt-0.5">
+                      Conductor: <span className="text-slate-900">{loc.conductor_nombre || 'No asignado'}</span>
+                    </p>
+                    <p className="text-xs text-slate-500 font-medium mt-0.5">Unidad: {loc.patente} ({loc.velocidad || 0} km/h)</p>
                     <div className="flex items-center gap-1.5 text-[10px] font-semibold text-slate-400 mt-1">
                       <Clock size={12} />
                       Reporte: {new Date(loc.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}

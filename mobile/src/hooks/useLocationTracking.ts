@@ -11,11 +11,33 @@ export function useLocationTracking() {
   const { user } = useAuth();
 
   useEffect(() => {
-    if (user) {
-      startTracking();
-    } else {
-      stopTracking();
-    }
+    const setupTracking = async () => {
+      if (user) {
+        if (user.rol === 'conductor') {
+          try {
+            // Check if there is already an active viaje
+            const activeViajeId = await SecureStore.getItemAsync('active_viaje_id');
+            if (!activeViajeId) {
+              // Fetch latest viajes for the conductor
+              const viajes = await api.get('/transporte/viajes');
+              // Find the first programmed or in-progress trip
+              const currentViaje = viajes.find((v: any) => v.estado === 'en_ruta' || v.estado === 'programado');
+              if (currentViaje) {
+                await SecureStore.setItemAsync('active_viaje_id', currentViaje.id.toString());
+                console.log('[useLocationTracking] Auto-assigned active_viaje_id:', currentViaje.id);
+              }
+            }
+          } catch (err: any) {
+            console.error('[useLocationTracking] Error fetching trips to auto-assign:', err.message);
+          }
+        }
+        await startTracking();
+      } else {
+        await stopTracking();
+      }
+    };
+
+    setupTracking();
   }, [user]);
 
   const startTracking = async () => {
