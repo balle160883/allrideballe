@@ -567,15 +567,35 @@ export default function MapaScreen({ route: routeProp, navigation }: any) {
 
   const handleSelectParada = (parada: Parada, viaje: Viaje) => {
     setSelectedParada(parada);
-    if (userLocation && parada.latitud && parada.longitud) {
-       fetchRoute(userLocation, [parada.longitud, parada.latitud]);
-       // El useEffect de la ruta se encargará de ajustar el zoom y encuadre automáticamente
-    } else if (parada.latitud && parada.longitud) {
-       cameraRef.current?.setCamera({
-          centerCoordinate: [parada.longitud, parada.latitud],
-          zoomLevel: 14,
-          animationDuration: 1000
-       });
+    
+    if (isConductor) {
+      if (userLocation && parada.latitud && parada.longitud) {
+         fetchRoute(userLocation, [parada.longitud, parada.latitud]);
+         // El useEffect de la ruta se encargará de ajustar el zoom y encuadre automáticamente
+      } else if (parada.latitud && parada.longitud) {
+         cameraRef.current?.setCamera({
+            centerCoordinate: [parada.longitud, parada.latitud],
+            zoomLevel: 14,
+            animationDuration: 1000
+         });
+      }
+    } else {
+      // Pasajero: Calcular ruta desde el autobús a la parada seleccionada
+      if (viaje?.ultima_ubicacion?.longitud && viaje?.ultima_ubicacion?.latitud && parada.longitud && parada.latitud) {
+         fetchRoute(
+           [viaje.ultima_ubicacion.longitud, viaje.ultima_ubicacion.latitud],
+           [parada.longitud, parada.latitud]
+         );
+      } else if (userLocation && parada.latitud && parada.longitud) {
+         // Fallback al GPS del pasajero si no hay ubicación de autobús
+         fetchRoute(userLocation, [parada.longitud, parada.latitud]);
+      } else if (parada.latitud && parada.longitud) {
+         cameraRef.current?.setCamera({
+            centerCoordinate: [parada.longitud, parada.latitud],
+            zoomLevel: 14,
+            animationDuration: 1000
+         });
+      }
     }
   };
 
@@ -849,7 +869,25 @@ export default function MapaScreen({ route: routeProp, navigation }: any) {
            </View>
            <Text style={styles.paradaInfoNombre}>{selectedParada.nombre}</Text>
            
-           {isConductor && (
+           {!isConductor && (
+              routeLoading ? (
+                <View style={styles.etaContainer}>
+                  <ActivityIndicator size="small" color={Colors.primary} />
+                  <Text style={styles.etaTextoLoading}>Calculando tiempo estimado de llegada...</Text>
+                </View>
+              ) : (
+                duration > 0 && (
+                  <View style={styles.etaContainer}>
+                    <MaterialCommunityIcons name="clock-time-four-outline" size={22} color={Colors.success} />
+                    <Text style={styles.etaTexto}>
+                      El autobús llegará en <Text style={styles.etaMinutos}>{Math.round(duration / 60)} min</Text> ({(distance / 1000).toFixed(1)} km)
+                    </Text>
+                  </View>
+                )
+              )
+            )}
+            
+            {isConductor && (
              <View style={styles.paradaActionButtons}>
                 <TouchableOpacity 
                   style={styles.navButton} 
@@ -1678,5 +1716,33 @@ const styles = StyleSheet.create({
     fontSize: 9,
     fontWeight: '900',
     textTransform: 'uppercase',
+  },
+  etaContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    marginTop: Spacing.md,
+    padding: Spacing.md,
+    backgroundColor: Colors.success + '15',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.success + '30',
+  },
+  etaTextoLoading: {
+    fontSize: 14,
+    color: Colors.textMuted,
+    fontWeight: '600',
+    marginLeft: Spacing.xs,
+  },
+  etaTexto: {
+    fontSize: 15,
+    color: Colors.text,
+    fontWeight: '700',
+    flex: 1,
+  },
+  etaMinutos: {
+    color: Colors.success,
+    fontWeight: '900',
+    fontSize: 16,
   },
 });
