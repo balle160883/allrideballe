@@ -30,9 +30,9 @@ export default function VisitasScreen({ navigation }: any) {
   const [ratingModalVisible, setRatingModalVisible] = useState(false);
   const [viajeACalificar, setViajeACalificar] = useState<Viaje | null>(null);
 
-  const handleNavigateToViaje = (viaje: Viaje) => {
+  const handleNavigateToViaje = React.useCallback((viaje: Viaje) => {
     navigation.navigate('DetalleVisita', { visita: viaje });
-  };
+  }, [navigation]);
 
   const handleCalificarPress = (viaje: Viaje) => {
     setViajeACalificar(viaje);

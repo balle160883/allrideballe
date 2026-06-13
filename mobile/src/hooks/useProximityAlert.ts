@@ -11,6 +11,12 @@ const LOCATION_POLL_INTERVAL = 30000; // 30 seconds
 
 export function useProximityAlert(viajes: Viaje[], onNavigate: (viaje: Viaje) => void) {
   const lastAlertedRef = useRef<{ viajeId: number; paradaId: string; time: number } | null>(null);
+  const onNavigateRef = useRef(onNavigate);
+
+  useEffect(() => {
+    onNavigateRef.current = onNavigate;
+  }, [onNavigate]);
+
   const { proximityAlertsEnabled } = useAuth();
   const [latestLocations, setLatestLocations] = useState<any[]>([]);
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -77,7 +83,7 @@ export function useProximityAlert(viajes: Viaje[], onNavigate: (viaje: Viaje) =>
             body,
             [
               { text: 'Cerrar' },
-              { text: 'Ver Detalle', onPress: () => onNavigate(viaje) }
+              { text: 'Ver Detalle', onPress: () => onNavigateRef.current(viaje) }
             ]
           );
           

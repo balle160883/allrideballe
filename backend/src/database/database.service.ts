@@ -1,6 +1,7 @@
 import { Injectable, OnModuleInit, OnModuleDestroy, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Pool, PoolClient, QueryResult, QueryResultRow } from 'pg';
+import * as bcrypt from 'bcrypt';
 
 @Injectable()
 export class DatabaseService implements OnModuleInit, OnModuleDestroy {
@@ -21,13 +22,16 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
   }
 
   async onModuleInit() {
+    const client = await this.pool.connect();
     try {
-      const client = await this.pool.connect();
-      client.release();
-      this.logger.log('Conexión con PostgreSQL establecida correctamente.');
+      // 1. Obtener lock consultivo a nivel de transacción
+      await client.query('BEGIN');
+      await client.query('SELECT pg_advisory_xact_lock(792837492)');
+      
+      this.logger.log('Conexión con PostgreSQL establecida y lock de migración adquirido.');
 
       // Verificar si existe la tabla 'usuarios'
-      const tableCheck = await this.pool.query(`
+      const tableCheck = await client.query(`
         SELECT EXISTS (
           SELECT FROM information_schema.tables 
           WHERE table_name = 'usuarios'
@@ -41,23 +45,25 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
         const sqlPath = path.join(process.cwd(), 'init_transport_schema.sql');
         if (fs.existsSync(sqlPath)) {
           const sql = fs.readFileSync(sqlPath, 'utf8');
-          await this.pool.query(sql);
+          await client.query(sql);
           this.logger.log('Esquema AllRide inicializado exitosamente con datos semilla.');
         } else {
           this.logger.error(`No se encontró el archivo init_transport_schema.sql en la ruta: ${sqlPath}`);
         }
       }
 
-      // Asegurar que el usuario ing.ballesteros16@gmail.com siempre exista en la tabla usuarios
-      await this.pool.query(`
+      // Asegurar que el usuario ing.ballesteros16@gmail.com siempre exista en la tabla usuarios (hashing la contraseña)
+      const plainPassword = 'Seguridad2026@';
+      const hashedPassword = await bcrypt.hash(plainPassword, 10);
+      await client.query(`
         INSERT INTO "usuarios" ("id", "email", "password_hash", "nombre", "rol")
-        VALUES ('4d4d4d4d-4d4d-4d4d-4d4d-4d4d4d4d4d4d', 'ing.ballesteros16@gmail.com', 'Seguridad2026@', 'Administrador Global', 'admin_cliente')
-        ON CONFLICT (email) DO UPDATE SET password_hash = 'Seguridad2026@', rol = 'admin_cliente';
-      `);
+        VALUES ('4d4d4d4d-4d4d-4d4d-4d4d-4d4d4d4d4d4d', 'ing.ballesteros16@gmail.com', $1, 'Administrador Global', 'admin_cliente')
+        ON CONFLICT (email) DO UPDATE SET password_hash = $1, rol = 'admin_cliente';
+      `, [hashedPassword]);
       this.logger.log('Usuario administrador global asegurado en la tabla de usuarios.');
 
       // Ejecutar alteraciones de esquema para el flujo de aprobación gerencial y smart routing
-      await this.pool.query(`
+      await client.query(`
         -- Alterar constraint de rol en usuarios para soportar 'gerente'
         ALTER TABLE "usuarios" DROP CONSTRAINT IF EXISTS "usuarios_rol_check";
         ALTER TABLE "usuarios" ADD CONSTRAINT "usuarios_rol_check" CHECK ("rol" IN ('admin_cliente', 'admin_proveedor', 'conductor', 'pasajero', 'gerente'));
@@ -131,10 +137,15 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
         ALTER TABLE "viajes" ADD COLUMN IF NOT EXISTS "proveedor_id" INTEGER REFERENCES "proveedores"("id") ON DELETE SET NULL;
         ALTER TABLE "viajes" ADD COLUMN IF NOT EXISTS "sede_id" INTEGER REFERENCES "sedes"("id") ON DELETE SET NULL;
       `);
-      this.logger.log('Esquema de base de datos actualizado para todas las mejoras sugeridas (Geofencing, SOS, Multi-Proveedor/Sede).');
+      
+      await client.query('COMMIT');
+      this.logger.log('Esquema de base de datos inicializado y actualizado correctamente.');
     } catch (error) {
+      await client.query('ROLLBACK').catch(() => {});
       this.initError = error.message;
-      this.logger.error('Error al conectar con PostgreSQL:', error.message);
+      this.logger.error('Error al conectar con PostgreSQL o ejecutar esquema:', error.message);
+    } finally {
+      client.release();
     }
   }
 

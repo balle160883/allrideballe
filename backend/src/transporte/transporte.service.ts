@@ -597,6 +597,16 @@ export class TransporteService {
     const paradas = routeRes.rows[0].paradas;
     if (!Array.isArray(paradas)) return;
 
+    // Obtener los arribos y salidas ya registrados de este viaje en una sola consulta
+    const existingTimesRes = await this.databaseService.query(
+      'SELECT orden, "fecha_hora_llegada", "fecha_hora_salida" FROM "tiempos_paradas" WHERE "viaje_id" = $1',
+      [viajeId]
+    );
+    const existingTimes = new Map<number, { llegada: any; salida: any }>();
+    existingTimesRes.rows.forEach((row: any) => {
+      existingTimes.set(Number(row.orden), { llegada: row.fecha_hora_llegada, salida: row.fecha_hora_salida });
+    });
+
     const calculateDistanceKm = (lat1: number, lon1: number, lat2: number, lon2: number) => {
       const R = 6371; // Radio en km
       const dLat = (lat2 - lat1) * Math.PI / 180;
@@ -616,17 +626,14 @@ export class TransporteService {
       const orden = Number(parada.orden);
 
       if (dist <= 0.1) { // 100 metros
-        // Validar si ya se registró la llegada
-        const checkArrival = await this.databaseService.query(
-          'SELECT id FROM "tiempos_paradas" WHERE "viaje_id" = $1 AND "orden" = $2',
-          [viajeId, orden]
-        );
-
-        if (checkArrival.rows.length === 0) {
+        // Validar si ya se registró la llegada en memoria
+        const record = existingTimes.get(orden);
+        if (!record || !record.llegada) {
           // Registrar arribo real
           await this.databaseService.query(
             `INSERT INTO "tiempos_paradas" ("viaje_id", "parada_nombre", "orden", "fecha_hora_llegada") 
-             VALUES ($1, $2, $3, CURRENT_TIMESTAMP)`,
+             VALUES ($1, $2, $3, CURRENT_TIMESTAMP)
+             ON CONFLICT ("viaje_id", "orden") DO UPDATE SET "fecha_hora_llegada" = COALESCE("tiempos_paradas"."fecha_hora_llegada", CURRENT_TIMESTAMP)`,
             [viajeId, parada.nombre, orden]
           );
           this.logger.log(`[Geofencing] Autobús ingresó a la parada "${parada.nombre}" del viaje #${viajeId}`);
@@ -636,12 +643,15 @@ export class TransporteService {
         }
       } else if (dist > 0.25) { // 250 metros
         // Si ya ingresó pero no ha marcado salida, registrar la salida real
-        await this.databaseService.query(
-          `UPDATE "tiempos_paradas" 
-           SET "fecha_hora_salida" = CURRENT_TIMESTAMP 
-           WHERE "viaje_id" = $1 AND "orden" = $2 AND "fecha_hora_salida" IS NULL`,
-          [viajeId, orden]
-        );
+        const record = existingTimes.get(orden);
+        if (record && record.llegada && !record.salida) {
+          await this.databaseService.query(
+            `UPDATE "tiempos_paradas" 
+             SET "fecha_hora_salida" = CURRENT_TIMESTAMP 
+             WHERE "viaje_id" = $1 AND "orden" = $2 AND "fecha_hora_salida" IS NULL`,
+            [viajeId, orden]
+          );
+        }
       }
     }
   }

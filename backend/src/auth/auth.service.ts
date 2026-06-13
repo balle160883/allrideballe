@@ -7,6 +7,8 @@ import { MailService } from '../mail/mail.service';
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private databaseService: DatabaseService,
     private jwtService: JwtService,
@@ -29,6 +31,8 @@ export class AuthService {
       const user = users[0];
       
       let isMatch = false;
+      let needsMigration = false;
+      
       // Si el hash parece un hash de bcrypt, intentamos comparar con bcrypt
       if (user.password_hash && user.password_hash.startsWith('$2')) {
         try {
@@ -39,9 +43,26 @@ export class AuthService {
       } else {
         // Si no parece bcrypt, comparamos directamente (texto plano para migración)
         isMatch = pass === user.password_hash;
+        if (isMatch) {
+          needsMigration = true;
+        }
       }
       
       if (isMatch) {
+        if (needsMigration) {
+          // Actualización asíncrona en segundo plano
+          bcrypt.hash(pass, 10).then(newHash => {
+            return this.databaseService.query(
+              'UPDATE "usuarios" SET "password_hash" = $1 WHERE "id" = $2',
+              [newHash, user.id]
+            );
+          }).then(() => {
+            this.logger.log(`Contraseña del usuario ${email} migrada exitosamente a bcrypt.`);
+          }).catch(err => {
+            this.logger.error(`Error al migrar contraseña para ${email}: ${err.message}`);
+          });
+        }
+        
         const { password_hash, ...res } = user;
         return res;
       }

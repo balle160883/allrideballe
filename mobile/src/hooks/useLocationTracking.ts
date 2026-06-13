@@ -71,31 +71,3 @@ export function useLocationTracking() {
     }
   };
 }
-
-// Register background task
-TaskManager.defineTask(LOCATION_TRACKING_TASK, async ({ data, error }: any) => {
-  if (error) {
-    console.error(error);
-    return;
-  }
-  if (data) {
-    const { locations } = data;
-    const location = locations[0];
-    if (location) {
-      try {
-        const activeViajeId = await SecureStore.getItemAsync('active_viaje_id');
-        if (activeViajeId) {
-          await api.post('/transporte/viajes/location', {
-            viaje_id: Number(activeViajeId),
-            latitud: location.coords.latitude,
-            longitud: location.coords.longitude,
-            velocidad: location.coords.speed || 0,
-            timestamp: new Date().toISOString(),
-          });
-        }
-      } catch (err) {
-        console.error('Error updating location background:', err);
-      }
-    }
-  }
-});
