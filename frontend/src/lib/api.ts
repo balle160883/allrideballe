@@ -1,17 +1,27 @@
-export let API_URL = process.env.NEXT_PUBLIC_API_URL;
+// URL base del backend de la API.
+// En producción, NEXT_PUBLIC_API_URL se inyecta en el Dockerfile como build arg (siempre presente).
+// En dev local, puede configurarse en .env.local
+let _apiUrl: string | undefined = process.env.NEXT_PUBLIC_API_URL;
 
-if (!API_URL && typeof window !== 'undefined') {
-  const { protocol, hostname } = window.location;
-  if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname.match(/^\d+\.\d+\.\d+\.\d+$/)) {
-    API_URL = `${protocol}//${hostname}:4000`;
+// Fallback en runtime del browser (solo si el build arg no estaba configurado)
+if (!_apiUrl && typeof window !== 'undefined') {
+  const { protocol, hostname, port } = window.location;
+  if (hostname === 'localhost' || hostname === '127.0.0.1') {
+    // Desarrollo local: el backend corre en puerto 4000
+    _apiUrl = `${protocol}//${hostname}:4000`;
+  } else if (hostname.match(/^\d+\.\d+\.\d+\.\d+$/)) {
+    // Acceso directo por IP: el backend está en el puerto 4000
+    _apiUrl = `${protocol}//${hostname}:4000`;
   } else {
-    API_URL = `${protocol}//api.${hostname.replace(/^(app|www)\./, '')}`;
+    // Acceso por dominio (ej: allride.com, nip.io, etc.):
+    // Intentar primero api.DOMINIO, que es el caso para allride.com/api.allride.com
+    const baseDomain = hostname.replace(/^(app|www|frontend)\\./, '');
+    _apiUrl = `${protocol}//api.${baseDomain}`;
   }
 }
 
-if (!API_URL) {
-  API_URL = 'https://api.allride.com';
-}
+// Último recurso: URL hardcodeada del servidor de producción
+export const API_URL = _apiUrl || 'http://2.24.81.205:4000';
 
 export function getAuthHeader(): Record<string, string> {
   if (typeof window !== 'undefined') {

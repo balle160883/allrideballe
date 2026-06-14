@@ -22,8 +22,11 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
   }
 
   async onModuleInit() {
-    const client = await this.pool.connect();
+    let client: any;
     try {
+      // Intentar obtener una conexión del pool (ahora dentro del try para manejar fallos de BD)
+      client = await this.pool.connect();
+
       // 1. Obtener lock consultivo a nivel de transacción
       await client.query('BEGIN');
       await client.query('SELECT pg_advisory_xact_lock(792837492)');
@@ -52,15 +55,16 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
         }
       }
 
-      // Asegurar que el usuario ing.ballesteros16@gmail.com siempre exista en la tabla usuarios (hashing la contraseña)
+      // Asegurar que el usuario administrador exista SOLO si no está registrado aún.
+      // Se usa ON CONFLICT DO NOTHING para NO sobreescribir contraseñas existentes en cada reinicio.
       const plainPassword = 'Seguridad2026@';
       const hashedPassword = await bcrypt.hash(plainPassword, 10);
       await client.query(`
         INSERT INTO "usuarios" ("id", "email", "password_hash", "nombre", "rol")
         VALUES ('4d4d4d4d-4d4d-4d4d-4d4d-4d4d4d4d4d4d', 'ing.ballesteros16@gmail.com', $1, 'Administrador Global', 'admin_cliente')
-        ON CONFLICT (email) DO UPDATE SET password_hash = $1, rol = 'admin_cliente';
+        ON CONFLICT (email) DO NOTHING;
       `, [hashedPassword]);
-      this.logger.log('Usuario administrador global asegurado en la tabla de usuarios.');
+      this.logger.log('Verificación de usuario administrador global completada.');
 
       // Ejecutar alteraciones de esquema para el flujo de aprobación gerencial y smart routing
       await client.query(`
@@ -141,11 +145,15 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
       await client.query('COMMIT');
       this.logger.log('Esquema de base de datos inicializado y actualizado correctamente.');
     } catch (error) {
-      await client.query('ROLLBACK').catch(() => {});
+      if (client) {
+        await client.query('ROLLBACK').catch(() => {});
+      }
       this.initError = error.message;
       this.logger.error('Error al conectar con PostgreSQL o ejecutar esquema:', error.message);
     } finally {
-      client.release();
+      if (client) {
+        client.release();
+      }
     }
   }
 

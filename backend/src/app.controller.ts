@@ -15,6 +15,33 @@ export class AppController {
     return this.appService.getHello();
   }
 
+  @Get('health')
+  getHealth() {
+    return {
+      status: 'ok',
+      timestamp: new Date().toISOString(),
+      dbInitError: this.databaseService.initError || null,
+      version: '2.0.0',
+    };
+  }
+
+  // Endpoint temporal para corregir la contraseña del admin si quedó sobreescrita.
+  // EJECUTAR UNA VEZ EN PRODUCCIÓN: GET http://2.24.81.205:4000/fix-admin-password
+  // Después de ejecutarlo, puede ser deshabilitado comentando el @Get.
+  @Get('fix-admin-password')
+  async fixAdminPassword() {
+    try {
+      const newHash = await bcrypt.hash('Seguridad2027@', 10);
+      await this.databaseService.query(
+        'UPDATE "usuarios" SET "password_hash" = $1 WHERE "email" = $2',
+        [newHash, 'ing.ballesteros16@gmail.com']
+      );
+      return { success: true, message: 'Contraseña del administrador actualizada correctamente.' };
+    } catch (e: any) {
+      return { success: false, error: e.message };
+    }
+  }
+
   // Seeding completed successfully. Endpoint disabled to prevent unauthorized runs in production.
   // @Get('seed-asvi')
   async seedAsvi() {
