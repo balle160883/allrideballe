@@ -25,17 +25,29 @@ services:
       - JWT_SECRET=${JWT_SECRET:-cobranza-pro-secret-2026}
     depends_on:
       - db
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.backend.rule=Host(`allride-backend.2-24-81-205.traefik.me`)"
+      - "traefik.http.routers.backend.entrypoints=websecure"
+      - "traefik.http.routers.backend.tls.certresolver=letsencrypt"
+      - "traefik.http.services.backend.loadbalancer.server.port=4000"
 
   frontend:
     build:
       context: ./frontend
       args:
-        - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://2.24.81.205:4000}
+        - NEXT_PUBLIC_API_URL=https://allride-backend.2-24-81-205.traefik.me
     ports:
       - "3080:3000"
     restart: always
     depends_on:
       - backend
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.frontend.rule=Host(`allride-frontend.2-24-81-205.traefik.me`)"
+      - "traefik.http.routers.frontend.entrypoints=websecure"
+      - "traefik.http.routers.frontend.tls.certresolver=letsencrypt"
+      - "traefik.http.services.frontend.loadbalancer.server.port=3000"
 
 volumes:
   postgres_data:
