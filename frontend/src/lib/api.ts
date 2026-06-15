@@ -1,27 +1,11 @@
-// URL base del backend de la API.
-// En producción, NEXT_PUBLIC_API_URL se inyecta en el Dockerfile como build arg (siempre presente).
-// En dev local, puede configurarse en .env.local
-let _apiUrl: string | undefined = process.env.NEXT_PUBLIC_API_URL;
-
-// Fallback en runtime del browser (solo si el build arg no estaba configurado)
-if (!_apiUrl && typeof window !== 'undefined') {
-  const { protocol, hostname, port } = window.location;
-  if (hostname === 'localhost' || hostname === '127.0.0.1') {
-    // Desarrollo local: el backend corre en puerto 4000
-    _apiUrl = `${protocol}//${hostname}:4000`;
-  } else if (hostname.match(/^\d+\.\d+\.\d+\.\d+$/)) {
-    // Acceso directo por IP: el backend está en el puerto 4000
-    _apiUrl = `${protocol}//${hostname}:4000`;
-  } else {
-    // Acceso por dominio (ej: allride.com, nip.io, etc.):
-    // Intentar primero api.DOMINIO, que es el caso para allride.com/api.allride.com
-    const baseDomain = hostname.replace(/^(app|www|frontend)\\./, '');
-    _apiUrl = `${protocol}//api.${baseDomain}`;
-  }
-}
-
-// Último recurso: URL hardcodeada del servidor de producción
-export const API_URL = _apiUrl || 'http://2.24.81.205:4000';
+// URL base para las llamadas a la API.
+// Usa un path relativo (/api-backend) que Next.js server-side re-dirige internamente
+// al contenedor del backend (http://backend:4000) via rewrite en next.config.mjs.
+// Esto evita el error de "Mixed Content" (HTTPS → HTTP) y problemas de CORS.
+//
+// Para desarrollo local sin Docker: crear frontend/.env.local con:
+//   NEXT_PUBLIC_API_URL=http://localhost:4000
+export const API_URL = process.env.NEXT_PUBLIC_API_URL || '/api-backend';
 
 export function getAuthHeader(): Record<string, string> {
   if (typeof window !== 'undefined') {

@@ -15,9 +15,13 @@ services:
     build:
       context: ./frontend
       args:
-        - NEXT_PUBLIC_API_URL=http://2.24.81.205:4000
+        # URL interna del backend en la red Docker (usada por Next.js server-side rewrite proxy)
+        # El browser nunca ve esta URL; solo llama a /api-backend/* (same-origin HTTPS)
+        - BACKEND_URL=http://backend:4000
     ports:
       - "3000:3000"
     restart: always
+    environment:
+      - BACKEND_URL=http://backend:4000
     depends_on:
       - backend
