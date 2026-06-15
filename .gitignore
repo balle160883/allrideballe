@@ -37,3 +37,7 @@ Thumbs.db
 *.xlsx
 *.xlsx.temp
 *.log
+
+# Test scripts
+backend/scratch/test-location.js
+backend/scratch/create-test-trip-and-locations.js

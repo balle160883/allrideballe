@@ -25,6 +25,8 @@ export function useLocationTracking() {
               if (currentViaje) {
                 await SecureStore.setItemAsync('active_viaje_id', currentViaje.id.toString());
                 console.log('[useLocationTracking] Auto-assigned active_viaje_id:', currentViaje.id);
+              } else {
+                console.log('[useLocationTracking] No active viajes found. Waiting for a trip to be assigned.');
               }
             }
           } catch (err: any) {

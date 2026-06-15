@@ -699,7 +699,9 @@ export class TransporteService {
     const result = await this.databaseService.query(`
       SELECT DISTINCT ON (uf.viaje_id) 
         uf.viaje_id, uf.latitud, uf.longitud, uf.velocidad, uf.timestamp,
-        r.nombre as ruta_nombre, ve.patente, u.nombre as conductor_nombre
+        COALESCE(r.nombre, 'Ruta sin nombre') as ruta_nombre, 
+        COALESCE(ve.patente, 'S/D') as patente, 
+        COALESCE(u.nombre, 'Conductor no asignado') as conductor_nombre
       FROM "ubicaciones_flota" uf
       LEFT JOIN "viajes" v ON uf.viaje_id = v.id
       LEFT JOIN "rutas" r ON v.ruta_id = r.id
