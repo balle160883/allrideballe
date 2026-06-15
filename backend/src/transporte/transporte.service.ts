@@ -705,6 +705,8 @@ export class TransporteService {
       LEFT JOIN "rutas" r ON v.ruta_id = r.id
       LEFT JOIN "vehiculos" ve ON v.vehiculo_id = ve.id
       LEFT JOIN "usuarios" u ON v.conductor_id = u.id
+      WHERE v.estado IN ('en_curso', 'activo')
+        AND uf.timestamp >= NOW() - INTERVAL '2 hours'
       ORDER BY uf.viaje_id, uf.timestamp DESC
     `);
     return result.rows;
