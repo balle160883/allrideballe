@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { API_URL, getAuthHeader } from '@/lib/api';
 import { 
   LayoutDashboard, 
   CreditCard, 
@@ -83,10 +84,8 @@ export function Sidebar({ isOpen, onClose }: { isOpen?: boolean, onClose?: () =>
       if (isAllowed) {
         const fetchPending = async () => {
           try {
-            const token = localStorage.getItem('auth_token');
-            const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-            const res = await fetch(`${apiUrl}/transporte/reservas/pendientes`, {
-              headers: { 'Authorization': `Bearer ${token}` }
+            const res = await fetch(`${API_URL}/transporte/reservas/pendientes`, {
+              headers: getAuthHeader()
             });
             if (res.ok) {
               const data = await res.json();
