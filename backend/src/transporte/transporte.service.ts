@@ -703,11 +703,12 @@ export class TransporteService {
         COALESCE(ve.patente, 'S/D') as patente, 
         COALESCE(u.nombre, 'Conductor no asignado') as conductor_nombre
       FROM "ubicaciones_flota" uf
-      LEFT JOIN "viajes" v ON uf.viaje_id = v.id
+      INNER JOIN "viajes" v ON uf.viaje_id = v.id
       LEFT JOIN "rutas" r ON v.ruta_id = r.id
       LEFT JOIN "vehiculos" ve ON v.vehiculo_id = ve.id
       LEFT JOIN "usuarios" u ON v.conductor_id = u.id
       WHERE uf.timestamp >= NOW() - INTERVAL '2 hours'
+        AND v.estado IN ('en_ruta', 'programado')
       ORDER BY uf.viaje_id, uf.timestamp DESC
     `);
     return result.rows;
