@@ -10,7 +10,7 @@ import {
   RefreshCw, ArrowLeft
 } from 'lucide-react';
 
-const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN || '';
+const MAPBOX_TOKEN = 'pk.eyJ1IjoiZGpiYjE2MDg4MyIsImEiOiJjbW4zY2o0dTUwOGdxMnFxNTAxZnJocjJvIn0.Yv7408j9tAieaX-YB-vAwg';
 const REFRESH_INTERVAL_MS = 5000;
 
 const MAP_STYLES: Record<string, string> = {
