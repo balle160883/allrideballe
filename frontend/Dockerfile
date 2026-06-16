@@ -9,6 +9,9 @@ WORKDIR /app
 # NO es una variable pública del browser; el browser solo usa paths relativos (/api-backend).
 ARG BACKEND_URL=http://backend:4000
 ENV BACKEND_URL=$BACKEND_URL
+# NEXT_PUBLIC_MAPBOX_TOKEN: Token público de Mapbox para el cliente
+ARG NEXT_PUBLIC_MAPBOX_TOKEN
+ENV NEXT_PUBLIC_MAPBOX_TOKEN=$NEXT_PUBLIC_MAPBOX_TOKEN
 COPY package*.json ./
 RUN npm install
 COPY . .

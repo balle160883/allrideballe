@@ -42,6 +42,7 @@ services:
       context: ./frontend
       args:
         - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://2.24.81.205:4000}
+        - NEXT_PUBLIC_MAPBOX_TOKEN=${NEXT_PUBLIC_MAPBOX_TOKEN:-pk.eyJ1IjoiZGpiYjE2MDg4MyIsImEiOiJjbW4zY2o0dTUwOGdxMnFxNTAxZnJocjJvIn0.Yv7408j9tAieaX-YB-vAwg}
     ports:
       - "3080:3000"
     restart: always
