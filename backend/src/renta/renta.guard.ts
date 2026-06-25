@@ -43,12 +43,27 @@ export class RentaGuard implements CanActivate {
       return true;
     }
 
-    // 2. Consultar el estado de renta del cliente
-    // Intentamos buscar por email exacto o por dominio
     try {
       const rentas = await this.rentaService.findAll();
-      
-      // Buscamos si hay una renta bloqueada para este usuario o su empresa
+
+      // 2. BLOQUEO POR PROVEEDOR: Si el usuario tiene proveedor_id, verificar la renta de su empresa
+      const proveedorId = await this.rentaService.getUserProveedorId(email);
+      if (proveedorId) {
+        const rentaBloqueada = rentas.find(r =>
+          r.proveedor_id === proveedorId && r.status === 'bloqueado'
+        );
+        if (rentaBloqueada) {
+          this.logger.warn(`Acceso bloqueado por falta de pago para proveedor_id: ${proveedorId} (usuario: ${email})`);
+          throw new ForbiddenException({
+            message: 'Servicio Suspendido',
+            detail: 'Tu suscripción mensual ha vencido o ha sido bloqueada por el administrador. Favor de contactar a soporte.',
+            error: 'PAYMENT_REQUIRED'
+          });
+        }
+        return true;
+      }
+
+      // 3. FALLBACK LEGACY: Cuentas sin proveedor_id (dominios/emails directos)
       const rentaBloqueada = rentas.find(r => 
         (r.cliente_email.toLowerCase() === email || r.cliente_email.toLowerCase() === domain) && 
         r.status === 'bloqueado'

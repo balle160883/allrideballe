@@ -10,7 +10,10 @@ export class RentaService {
   async findAll() {
     try {
       const result = await this.databaseService.query(
-        'SELECT * FROM rentas_mensuales ORDER BY cliente_email ASC'
+        `SELECT r.*, p.nombre as proveedor_nombre 
+         FROM rentas_mensuales r
+         LEFT JOIN proveedores p ON r.proveedor_id = p.id
+         ORDER BY r.cliente_email ASC`
       );
       return result.rows;
     } catch (error) {
@@ -22,14 +25,15 @@ export class RentaService {
   async upsert(data: any) {
     try {
       const result = await this.databaseService.query(
-        `INSERT INTO rentas_mensuales (cliente_email, status, monto, fecha_ultimo_pago, proximo_vencimiento)
-         VALUES ($1, $2, $3, $4, $5)
+        `INSERT INTO rentas_mensuales (cliente_email, status, monto, fecha_ultimo_pago, proximo_vencimiento, proveedor_id)
+         VALUES ($1, $2, $3, $4, $5, $6)
          ON CONFLICT (cliente_email)
          DO UPDATE SET
            status = EXCLUDED.status,
            monto = EXCLUDED.monto,
            fecha_ultimo_pago = EXCLUDED.fecha_ultimo_pago,
-           proximo_vencimiento = EXCLUDED.proximo_vencimiento
+           proximo_vencimiento = EXCLUDED.proximo_vencimiento,
+           proveedor_id = EXCLUDED.proveedor_id
          RETURNING *`,
         [
           data.cliente_email,
@@ -37,12 +41,29 @@ export class RentaService {
           data.monto || 0,
           data.fecha_ultimo_pago,
           data.proximo_vencimiento,
+          data.proveedor_id || null,
         ]
       );
       return result.rows;
     } catch (error) {
       this.logger.error(`Error upserting renta: ${error.message}`);
       throw error;
+    }
+  }
+
+  async getUserProveedorId(email: string): Promise<number | null> {
+    try {
+      const result = await this.databaseService.query(
+        'SELECT proveedor_id FROM "usuarios" WHERE LOWER(email) = LOWER($1)',
+        [email.trim()]
+      );
+      if (result.rows.length > 0) {
+        return result.rows[0].proveedor_id;
+      }
+      return null;
+    } catch (error) {
+      this.logger.error(`Error fetching user proveedor_id: ${error.message}`);
+      return null;
     }
   }
 }

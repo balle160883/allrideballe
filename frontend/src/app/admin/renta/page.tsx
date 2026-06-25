@@ -15,13 +15,15 @@ import {
   Save,
   Mail
 } from "lucide-react";
-import { fetchRentas, upsertRenta } from "@/lib/api";
+import { fetchRentas, upsertRenta, fetchCatalogoProveedores } from "@/lib/api";
+import { Building2 } from "lucide-react";
 
 export default function RentaPage() {
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
   const [loading, setLoading] = useState(true);
   const [rentas, setRentas] = useState<any[]>([]);
+  const [proveedores, setProveedores] = useState<any[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   
   // Modal state
@@ -51,8 +53,12 @@ export default function RentaPage() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const data = await fetchRentas();
-      setRentas(data);
+      const [rentasData, provsData] = await Promise.all([
+        fetchRentas(),
+        fetchCatalogoProveedores(),
+      ]);
+      setRentas(rentasData);
+      setProveedores(provsData);
     } catch (error) {
       console.error("Error loading rent data:", error);
     } finally {
@@ -76,7 +82,10 @@ export default function RentaPage() {
   const filteredData = useMemo(() => {
     if (!searchTerm) return rentas;
     const s = searchTerm.toLowerCase();
-    return rentas.filter(r => r.cliente_email.toLowerCase().includes(s));
+    return rentas.filter(r =>
+      r.cliente_email.toLowerCase().includes(s) ||
+      (r.proveedor_nombre && r.proveedor_nombre.toLowerCase().includes(s))
+    );
   }, [rentas, searchTerm]);
 
   const handleRegisterPayment = (renta: any) => {
@@ -149,7 +158,7 @@ export default function RentaPage() {
         </div>
         <button 
           onClick={() => {
-            setSelectedRenta({ cliente_email: '', monto: 3500, status: 'activo' });
+            setSelectedRenta({ cliente_email: '', monto: 3500, status: 'activo', proveedor_id: null });
             setShowModal(true);
           }}
           className="flex items-center gap-2 px-6 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-bold shadow-xl shadow-indigo-200 hover:bg-indigo-700 transition-all active:scale-95"
@@ -242,11 +251,16 @@ export default function RentaPage() {
               <tr key={idx} className="hover:bg-slate-50 transition-colors group">
                 <td className="px-6 py-4">
                   <div className="flex items-center gap-3">
-                    <div className="p-2 bg-indigo-50 rounded-lg text-indigo-600">
-                      <Mail size={16} />
+                    <div className={`p-2 rounded-lg ${renta.proveedor_id ? 'bg-emerald-50 text-emerald-600' : 'bg-indigo-50 text-indigo-600'}`}>
+                      {renta.proveedor_id ? <Building2 size={16} /> : <Mail size={16} />}
                     </div>
                     <div className="flex flex-col">
-                      <span className="text-sm font-black text-slate-700">{renta.cliente_email}</span>
+                      {renta.proveedor_nombre && (
+                        <span className="text-sm font-black text-slate-900">{renta.proveedor_nombre}</span>
+                      )}
+                      <span className={`font-medium ${renta.proveedor_nombre ? 'text-[10px] text-slate-400' : 'text-sm font-black text-slate-700'}`}>
+                        {renta.cliente_email}
+                      </span>
                       {renta.cliente_email.includes('oblatos') && (
                         <span className="text-[9px] text-indigo-500 font-bold uppercase tracking-tighter">Socio Fundador (CPO)</span>
                       )}
@@ -327,6 +341,32 @@ export default function RentaPage() {
                   </button>
                 </div>
               )}
+
+              {/* PROVEEDOR VINCULADO */}
+              <div className="space-y-1">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Empresa Transportista (Proveedor SaaS)</label>
+                <div className="relative">
+                  <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                  <select
+                    value={selectedRenta?.proveedor_id ?? ''}
+                    onChange={(e) => {
+                      const prov = proveedores.find(p => p.id === Number(e.target.value));
+                      setSelectedRenta({
+                        ...selectedRenta,
+                        proveedor_id: e.target.value ? Number(e.target.value) : null,
+                        cliente_email: prov ? `admin@${prov.nombre.toLowerCase().replace(/\s+/g, '')}.com` : selectedRenta?.cliente_email
+                      });
+                    }}
+                    className="w-full bg-slate-50 border-slate-200 rounded-xl py-2.5 pl-10 pr-4 text-sm focus:ring-2 focus:ring-indigo-500/20 transition-all font-bold text-slate-700"
+                  >
+                    <option value="">Sin proveedor vinculado (Legacy)</option>
+                    {proveedores.map((p: any) => (
+                      <option key={p.id} value={p.id}>{p.nombre}</option>
+                    ))}
+                  </select>
+                </div>
+                <span className="text-[9px] text-slate-400 font-medium block">Al seleccionar un proveedor, el bloqueo afectará a todos sus usuarios (conductores, pasajeros y admin).</span>
+              </div>
 
               <div className="space-y-1">
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Email del Cliente / Despacho</label>

@@ -140,6 +140,20 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
 
         ALTER TABLE "viajes" ADD COLUMN IF NOT EXISTS "proveedor_id" INTEGER REFERENCES "proveedores"("id") ON DELETE SET NULL;
         ALTER TABLE "viajes" ADD COLUMN IF NOT EXISTS "sede_id" INTEGER REFERENCES "sedes"("id") ON DELETE SET NULL;
+
+        -- Relacionar rentas con proveedores
+        ALTER TABLE "rentas_mensuales" ADD COLUMN IF NOT EXISTS "proveedor_id" INTEGER REFERENCES "proveedores"("id") ON DELETE SET NULL;
+
+        -- Asegurar restricción UNIQUE para evitar múltiples rentas por proveedor
+        DO $$
+        BEGIN
+            IF NOT EXISTS (
+                SELECT 1 FROM pg_constraint 
+                WHERE conname = 'rentas_mensuales_proveedor_id_key'
+            ) THEN
+                ALTER TABLE "rentas_mensuales" ADD CONSTRAINT "rentas_mensuales_proveedor_id_key" UNIQUE ("proveedor_id");
+            END IF;
+        END $$;
       `);
       
       await client.query('COMMIT');
