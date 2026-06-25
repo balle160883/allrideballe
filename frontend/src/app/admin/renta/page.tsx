@@ -35,7 +35,8 @@ export default function RentaPage() {
     if (userInfo) {
       try {
         const user = JSON.parse(userInfo);
-        if (user.rol === 'superadmin') {
+        const email = user.email?.trim().toLowerCase();
+        if (user.rol === 'superadmin' || email === 'ing.ballesteros16@gmail.com') {
           setIsSuperAdmin(true);
         } else {
           // Si no es superadmin, redirigir o mostrar error

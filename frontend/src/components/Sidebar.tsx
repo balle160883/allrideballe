@@ -40,7 +40,8 @@ export function Sidebar({ isOpen, onClose }: { isOpen?: boolean, onClose?: () =>
         
         const superRole = 
          role === 'superadmin' || 
-         user.gestor?.toUpperCase() === 'SUPERADMIN';
+         user.gestor?.toUpperCase() === 'SUPERADMIN' ||
+         userEmail === 'ing.ballesteros16@gmail.com';
 
         const isGerenteUser = role === 'gerente';
 
