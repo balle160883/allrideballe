@@ -267,7 +267,9 @@ export default function FleetMapPage() {
   // ── Inicializar mapa ─────────────────────────────────────────────────────────
   useEffect(() => {
     if (!mapContainer.current) return;
-    mapboxgl.accessToken = MAPBOX_TOKEN;
+    const activeToken = 'pk.eyJ1IjoiZGpiYjE2MDg4MyIsImEiOiJjbW4zY2o0dTUwOGdxMnFvYmJwZ2xzbnUwIn0.Yv7408j9tAieaX-YB-vAwg';
+    const validToken = (MAPBOX_TOKEN && MAPBOX_TOKEN.trim().length > 20) ? MAPBOX_TOKEN.trim() : activeToken;
+    mapboxgl.accessToken = validToken;
 
     const m = new mapboxgl.Map({
       container: mapContainer.current,
