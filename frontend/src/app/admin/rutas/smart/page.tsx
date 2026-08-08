@@ -18,6 +18,7 @@ import {
   AlertCircle
 } from "lucide-react";
 import { 
+  API_URL,
   simularSmartRutas, 
   aplicarSmartRutas,
   fetchConductores,
@@ -79,8 +80,7 @@ export default function SmartRoutingPage() {
         
         // Cargar vehículos desde el catálogo de la API
         const token = localStorage.getItem('auth_token');
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-        const vRes = await fetch(`${apiUrl}/transporte/vehiculos`, {
+        const vRes = await fetch(`${API_URL}/transporte/vehiculos`, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         if (vRes.ok) {
