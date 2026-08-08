@@ -10,7 +10,10 @@ import {
   RefreshCw, ArrowLeft, Search, Filter, Volume2, ShieldAlert
 } from 'lucide-react';
 
-const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN || 'pk.eyJ1IjoiZGpiYjE2MDg4MyIsImEiOiJjbW4zY2o0dTUwOGdxMnFvYmJwZ2xzbnUwIn0.Yv7408j9tAieaX-YB-vAwg';
+const envToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
+const MAPBOX_TOKEN = (envToken && envToken.trim().length > 10)
+  ? envToken.trim()
+  : 'pk.eyJ1IjoiZGpiYjE2MDg4MyIsImEiOiJjbW4zY2o0dTUwOGdxMnFvYmJwZ2xzbnUwIn0.Yv7408j9tAieaX-YB-vAwg';
 const REFRESH_INTERVAL_MS = 5000;
 
 const MAP_STYLES: Record<string, string> = {
