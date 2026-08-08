@@ -1,4 +1,5 @@
 import { Share, Alert } from 'react-native';
+import { AppConfig } from '../constants/config';
 
 export type TicketType = 'aviso' | 'promesa' | 'aval';
 
@@ -31,7 +32,7 @@ export const BluetoothPrinter = {
     
     let header = `
 ********************************
-      *CAJA POPULAR OBLATOS*
+      *${AppConfig.ticket.headerTitle}*
 ********************************
 TICKET: ${ticketId}
 FECHA: ${fechaStr} ${horaStr}
@@ -106,7 +107,7 @@ SALDO ATRASADO: $${data.saldoAtrasado.toLocaleString('es-MX', { minimumFractionD
 
 --------------------------------
 GESTOR: ${data.gestorNombre}
-CONTACTO: ${data.gestorTelefono || '3339421050 ext. 1110, 1111, 1194'}
+CONTACTO: ${data.gestorTelefono || AppConfig.ticket.footerPhone}
 
 !!! AVISO DE SEGURIDAD !!!
 El gestor NO tiene autorización
@@ -115,8 +116,8 @@ Realice sus pagos solo en caja.
 
 --------------------------------
 Aviso de Privacidad:
-bit.ly/cpo-privacidad
-www.cajapopularoblatos.com.mx
+${AppConfig.ticket.privacyPolicyUrl}
+${AppConfig.ticket.website}
 ********************************
 \n\n\n`;
 
@@ -125,7 +126,7 @@ www.cajapopularoblatos.com.mx
     try {
       await Share.share({
         message: fullTicket,
-        title: 'Ticket Caja Popular Oblatos'
+        title: `${AppConfig.ticket.ticketTitlePrefix} - ${ticketId}`
       });
       return true;
     } catch (e: any) {

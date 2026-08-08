@@ -7,10 +7,10 @@ import { fetchLatestLocations, fetchViajes, fetchReservas, fetchAlertas } from '
 import {
   MapPin, User, Clock, Navigation, Bus, Route, Maximize2, Minimize2,
   Layers, ChevronLeft, AlertTriangle, Wifi, Users, Gauge, Timer,
-  RefreshCw, ArrowLeft
+  RefreshCw, ArrowLeft, Search, Filter, Volume2, ShieldAlert
 } from 'lucide-react';
 
-const MAPBOX_TOKEN = 'pk.eyJ1IjoiZGpiYjE2MDg4MyIsImEiOiJjbWl4ZnVocGMwM3k4M2xvOXkzMXY2eWxhIn0.yNlKzNWQ7gwTGSCq5jI6IA';
+const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN || 'pk.eyJ1IjoiZGpiYjE2MDg4MyIsImEiOiJjbWl4ZnVocGMwM3k4M2xvOXkzMXY2eWxhIn0.yNlKzNWQ7gwTGSCq5jI6IA';
 const REFRESH_INTERVAL_MS = 5000;
 
 const MAP_STYLES: Record<string, string> = {
@@ -28,6 +28,17 @@ interface VehicleLocation {
   ruta_nombre: string;
   patente: string;
   conductor_nombre: string;
+}
+
+/** Estructura para interpolación suave a 60 FPS */
+interface MarkerInterpolation {
+  marker: mapboxgl.Marker;
+  el: HTMLDivElement;
+  currentCoords: [number, number];
+  targetCoords: [number, number];
+  startCoords: [number, number];
+  animStartTime: number;
+  animDuration: number;
 }
 
 /** Distancia en km entre dos coordenadas (Haversine) */
@@ -124,6 +135,8 @@ export default function FleetMapPage() {
   const [loadingDetail,   setLoadingDetail]   = useState(false);
   const [mapStyle,        setMapStyle]        = useState<'dark' | 'streets' | 'satellite'>('dark');
   const [isFullscreen,    setIsFullscreen]    = useState(false);
+  const [searchQuery,     setSearchQuery]     = useState('');
+  const [filterMode,      setFilterMode]      = useState<'todos' | 'moving' | 'alert'>('todos');
   const [countdown,       setCountdown]       = useState(REFRESH_INTERVAL_MS / 1000);
   const [lastUpdate,      setLastUpdate]      = useState<Date | null>(null);
 
@@ -406,29 +419,74 @@ export default function FleetMapPage() {
   const alertasActivas = alertas.filter((a: any) => !a.resuelta);
   const pasajerosAbordados = detailPasajeros.filter(p => p.reserva_estado === 'confirmado').length;
 
+  // Filtrado dinámico de unidades
+  const filteredLocations = locations.filter(loc => {
+    const query = searchQuery.trim().toLowerCase();
+    const matchesSearch = !query || 
+      (loc.ruta_nombre || '').toLowerCase().includes(query) ||
+      (loc.patente || '').toLowerCase().includes(query) ||
+      (loc.conductor_nombre || '').toLowerCase().includes(query);
+
+    if (!matchesSearch) return false;
+
+    if (filterMode === 'moving') return (loc.velocidad || 0) > 0;
+    if (filterMode === 'alert') return alertasActivas.some((a: any) => a.viaje_id === loc.viaje_id);
+    return true;
+  });
+
   return (
     <div className={`flex flex-col gap-0 ${isFullscreen ? 'fixed inset-0 z-50 bg-slate-950 p-0' : 'space-y-4'}`}>
+
+      {/* ── Banner Flotante de SOS e Incidentes en Vivo ─────────────────────── */}
+      {alertasActivas.length > 0 && !isFullscreen && (
+        <div className="bg-red-600 text-white px-4 py-3 rounded-2xl shadow-lg border border-red-500 flex items-center justify-between animate-pulse">
+          <div className="flex items-center gap-3">
+            <ShieldAlert size={24} className="shrink-0 text-white" />
+            <div>
+              <p className="font-extrabold text-sm uppercase tracking-wide">
+                ¡Alerta en Vivo! {alertasActivas.length} incidentes reportados en ruta
+              </p>
+              <p className="text-xs text-red-100 font-medium">
+                Última alerta: "{alertasActivas[0].descripcion}" en {alertasActivas[0].ruta_nombre || 'Ruta activa'}.
+              </p>
+            </div>
+          </div>
+          <button 
+            onClick={() => {
+              const alertViajeId = alertasActivas[0].viaje_id;
+              if (alertViajeId) {
+                setSelectedViajeId(alertViajeId);
+                const loc = locations.find(l => l.viaje_id === alertViajeId);
+                if (loc && map.current) map.current.flyTo({ center: [loc.longitud, loc.latitud], zoom: 15 });
+              }
+            }}
+            className="px-3 py-1.5 bg-white text-red-700 hover:bg-red-50 rounded-xl text-xs font-black uppercase tracking-wider transition-colors shadow-sm shrink-0"
+          >
+            Ubicar en Mapa
+          </button>
+        </div>
+      )}
 
       {/* ── Header ──────────────────────────────────────────────────────────── */}
       {!isFullscreen && (
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 px-2">
           <div>
-            <h1 className="text-2xl lg:text-3xl font-extrabold text-slate-900 tracking-tight flex items-center gap-2">
-              <MapPin className="text-blue-600" size={30} />
+            <h1 className="text-2xl lg:text-3xl font-extrabold text-slate-900 dark:text-slate-100 tracking-tight flex items-center gap-2">
+              <MapPin className="text-blue-600 dark:text-blue-400" size={30} />
               Mapa de Flota en Vivo
             </h1>
-            <p className="text-slate-500 font-medium text-sm lg:text-base">
+            <p className="text-slate-500 dark:text-slate-400 font-medium text-sm lg:text-base">
               Rastreo GPS de todos los vehículos en tránsito · Actualización cada {REFRESH_INTERVAL_MS / 1000}s
             </p>
           </div>
           <div className="flex items-center gap-3">
             {lastUpdate && (
-              <span className="text-xs font-bold text-slate-400 flex items-center gap-1">
+              <span className="text-xs font-bold text-slate-400 dark:text-slate-500 flex items-center gap-1">
                 <RefreshCw size={11} className={countdown <= 1 ? 'animate-spin text-blue-500' : ''} />
                 Actualiza en {countdown}s
               </span>
             )}
-            <div className="bg-emerald-50 text-emerald-700 px-3 py-1.5 rounded-full text-xs font-black uppercase tracking-wider flex items-center gap-2 border border-emerald-100">
+            <div className="bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 px-3 py-1.5 rounded-full text-xs font-black uppercase tracking-wider flex items-center gap-2 border border-emerald-100 dark:border-emerald-800/50">
               <Wifi size={13} className="animate-pulse" />
               {totalVehicles} unidades GPS
             </div>
@@ -451,21 +509,57 @@ export default function FleetMapPage() {
            style={isFullscreen ? { display: 'flex', gap: '8px', padding: '8px', flex: 1 } : undefined}>
 
         {/* Panel lateral */}
-        <div className={`bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col ${isFullscreen ? 'w-72 flex-shrink-0' : 'lg:col-span-1'}`}>
-          <div className="p-3 border-b border-slate-100 bg-slate-50">
+        <div className={`bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col transition-colors duration-200 ${isFullscreen ? 'w-72 flex-shrink-0' : 'lg:col-span-1'}`}>
+          <div className="p-3 border-b border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/40 space-y-2">
             {selectedViajeId ? (
               <button
                 onClick={() => setSelectedViajeId(null)}
-                className="flex items-center gap-2 text-blue-600 text-xs font-black hover:text-blue-700 transition-colors"
+                className="flex items-center gap-2 text-blue-600 dark:text-blue-400 text-xs font-black hover:underline transition-colors"
               >
                 <ArrowLeft size={14} />
                 Ver toda la flota
               </button>
             ) : (
-              <h2 className="font-extrabold text-xs uppercase text-slate-400 tracking-wider flex items-center gap-2">
-                <Bus size={12} />
-                Flota en Ruta ({totalVehicles})
-              </h2>
+              <>
+                <div className="flex items-center justify-between">
+                  <h2 className="font-extrabold text-xs uppercase text-slate-400 dark:text-slate-500 tracking-wider flex items-center gap-2">
+                    <Bus size={12} />
+                    Flota en Ruta ({filteredLocations.length})
+                  </h2>
+                </div>
+                {/* Search Bar */}
+                <div className="flex items-center gap-2 bg-white dark:bg-slate-900 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700">
+                  <Search size={14} className="text-slate-400 shrink-0" />
+                  <input 
+                    type="text" 
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Buscar ruta, placa o chofer..."
+                    className="w-full bg-transparent border-none outline-none text-xs text-slate-800 dark:text-slate-200 placeholder:text-slate-400"
+                  />
+                </div>
+                {/* Filter Pills */}
+                <div className="flex items-center gap-1.5 text-[10px] font-bold pt-1">
+                  <button 
+                    onClick={() => setFilterMode('todos')}
+                    className={`px-2 py-0.5 rounded-lg border transition-all ${filterMode === 'todos' ? 'bg-blue-600 text-white border-blue-600' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-transparent'}`}
+                  >
+                    Todos ({locations.length})
+                  </button>
+                  <button 
+                    onClick={() => setFilterMode('moving')}
+                    className={`px-2 py-0.5 rounded-lg border transition-all ${filterMode === 'moving' ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-transparent'}`}
+                  >
+                    En Movimiento
+                  </button>
+                  <button 
+                    onClick={() => setFilterMode('alert')}
+                    className={`px-2 py-0.5 rounded-lg border transition-all ${filterMode === 'alert' ? 'bg-red-600 text-white border-red-600' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-transparent'}`}
+                  >
+                    SOS ({alertasActivas.length})
+                  </button>
+                </div>
+              </>
             )}
           </div>
 
@@ -569,14 +663,14 @@ export default function FleetMapPage() {
               <div className="p-2 space-y-1.5">
                 {loading ? (
                   <div className="p-4 text-center text-slate-400 text-xs font-medium">Localizando flota...</div>
-                ) : locations.length === 0 ? (
+                ) : filteredLocations.length === 0 ? (
                   <div className="p-8 text-center">
-                    <Navigation className="text-slate-300 mx-auto mb-2" size={28} />
-                    <p className="text-sm font-bold text-slate-500">Sin vehículos en ruta</p>
-                    <p className="text-xs text-slate-400 mt-1">Los conductores deben activar el GPS en la app móvil.</p>
+                    <Navigation className="text-slate-300 dark:text-slate-600 mx-auto mb-2" size={28} />
+                    <p className="text-sm font-bold text-slate-500 dark:text-slate-400">Sin vehículos coincidentes</p>
+                    <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">Prueba cambiando la búsqueda o los filtros.</p>
                   </div>
                 ) : (
-                  locations.map((loc) => {
+                  filteredLocations.map((loc) => {
                     const viaje = viajes.find(v => v.id === loc.viaje_id);
                     const alertaViaje = alertasActivas.find((a: any) => a.viaje_id === loc.viaje_id);
                     return (
@@ -694,8 +788,8 @@ export default function FleetMapPage() {
           </div>
 
           {/* Badge de marca */}
-          <div className="absolute bottom-8 right-3 z-10 bg-slate-900/70 backdrop-blur text-white px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest pointer-events-none">
-            AllRide GPS Engine
+          <div className="absolute bottom-8 right-3 z-10 bg-slate-900/80 backdrop-blur text-white px-3 py-1 rounded-xl text-[9px] font-black uppercase tracking-widest pointer-events-none border border-slate-700">
+            Pro Mobile Live GPS Engine
           </div>
         </div>
       </div>

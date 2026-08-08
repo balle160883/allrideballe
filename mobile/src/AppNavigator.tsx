@@ -10,6 +10,7 @@ import MainTabNavigator from './navigation/MainTabNavigator';
 import { useLocationTracking } from './hooks/useLocationTracking';
 import { usePushNotifications } from './utils/PushNotifications';
 import { api } from './api/backend';
+import OfflineBanner from './components/OfflineBanner';
 
 const Stack = createNativeStackNavigator();
 
@@ -68,6 +69,7 @@ export default function AppNavigator() {
 
   return (
     <NavigationContainer linking={linking as any}>
+      <OfflineBanner />
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         {user ? (
           <Stack.Screen name="Main" component={MainTabNavigator} />

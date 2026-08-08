@@ -3,13 +3,12 @@
     "name": "Pro Mobile",
     "slug": "pro-mobile",
     "scheme": "promobile",
-    "owner": "pro-mobile",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/logo_v2.png",
+    "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "splash": {
-      "image": "./assets/logo_v2.png",
+      "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
@@ -18,7 +17,7 @@
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#3B6CD4",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
@@ -54,13 +53,13 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "Permitir que Pro Mobile acceda a tu cámara para escanear códigos QR de pasajeros."
+          "cameraPermission": "Permitir que la aplicación acceda a tu cámara para escanear códigos QR."
         }
       ],
       [
         "expo-location",
         {
-          "locationAlwaysPermission": "Permitir que Pro Mobile acceda a tu ubicación siempre para seguimiento en tiempo real.",
+          "locationAlwaysPermission": "Permitir que la aplicación acceda a tu ubicación para seguimiento en tiempo real.",
           "isAndroidBackgroundLocationEnabled": true
         }
       ],
@@ -82,7 +81,7 @@
     ],
     "extra": {
       "eas": {
-        "projectId": "083ee954-80fa-4802-af06-3e5a8e8b7517"
+        "projectId": "1fab6af4-95b9-4702-aaeb-1fc54d52806d"
       }
     }
   }

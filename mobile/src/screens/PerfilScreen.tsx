@@ -3,6 +3,8 @@ import { StyleSheet, View, Text, TouchableOpacity, ScrollView, Switch, Alert, Li
 import { useAuth } from '../context/AuthContext';
 import { Colors, Spacing } from '../constants/theme';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { AppConfig } from '../constants/config';
+import { HapticFeedback } from '../utils/Haptics';
 
 export default function PerfilScreen() {
   const { user, signOut, proximityAlertsEnabled, setProximityAlertsEnabled } = useAuth();
@@ -10,6 +12,7 @@ export default function PerfilScreen() {
   const isPasajero = user?.rol === 'pasajero';
 
   const handleSOS = () => {
+    HapticFeedback.heavy();
     Alert.alert(
       '🚨 EMERGENCIA',
       '¿Deseas enviar una alerta de emergencia? Esto notificará inmediatamente al departamento de seguridad.',
@@ -19,6 +22,7 @@ export default function PerfilScreen() {
           text: 'Enviar Alerta', 
           style: 'destructive',
           onPress: () => {
+            HapticFeedback.error();
             Alert.alert(
               '✅ Alerta Enviada',
               'Tu alerta de emergencia ha sido registrada. El equipo de seguridad se pondrá en contacto contigo.'
@@ -30,6 +34,7 @@ export default function PerfilScreen() {
   };
 
   const handleContactarSoporte = () => {
+    HapticFeedback.light();
     Alert.alert(
       'Contactar Soporte',
       '¿Cómo deseas contactarnos?',
@@ -37,11 +42,11 @@ export default function PerfilScreen() {
         { text: 'Cancelar', style: 'cancel' },
         { 
           text: 'Llamar',
-          onPress: () => Linking.openURL('tel:+523312345678')
+          onPress: () => Linking.openURL(`tel:${AppConfig.support.phone}`)
         },
         { 
           text: 'Email',
-          onPress: () => Linking.openURL('mailto:soporte@allride.com')
+          onPress: () => Linking.openURL(`mailto:${AppConfig.support.email}`)
         },
       ]
     );

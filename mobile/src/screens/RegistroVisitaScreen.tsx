@@ -16,6 +16,8 @@ import { api } from '../api/backend';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import NetInfo from '@react-native-community/netinfo';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Speech from 'expo-speech';
+import { HapticFeedback } from '../utils/Haptics';
 
 export default function RegistroVisitaScreen({ route, navigation }: any) {
   const { visita, onScanSuccess } = route.params;
@@ -108,6 +110,10 @@ export default function RegistroVisitaScreen({ route, navigation }: any) {
           await AsyncStorage.setItem('@offline_abordajes', JSON.stringify(queue));
         }
 
+        // Confirmación de éxito háptica y de audio
+        HapticFeedback.success();
+        Speech.speak('Boleto validado en modo fuera de línea', { language: 'es' });
+
         Alert.alert(
           '🎟️ Abordaje Local Guardado',
           'Sin conexión a internet. El boleto fue validado y guardado de manera local. Se sincronizará automáticamente al recuperar la señal.'
@@ -123,6 +129,10 @@ export default function RegistroVisitaScreen({ route, navigation }: any) {
         identificador_tarjeta: scannedCardId.trim()
       });
 
+      // Confirmación de éxito háptica y de audio
+      HapticFeedback.success();
+      Speech.speak('Boleto validado con éxito', { language: 'es' });
+
       Alert.alert(
         '🎟️ Pasajero Abordado',
         `Validado con éxito: ${response.reserva.pasajero_nombre || 'Pasajero'} en Asiento #${response.reserva.asiento_numero || 'N/A'}`
@@ -131,6 +141,10 @@ export default function RegistroVisitaScreen({ route, navigation }: any) {
       if (onScanSuccess) onScanSuccess();
       navigation.goBack();
     } catch (e: any) {
+      // Confirmación de error háptica y de audio
+      HapticFeedback.error();
+      Speech.speak('Boleto no válido', { language: 'es' });
+
       Alert.alert('Error de Validación', e.message || 'La tarjeta/código no tiene una reservación activa para este viaje.');
     } finally {
       setLoading(false);
@@ -139,6 +153,7 @@ export default function RegistroVisitaScreen({ route, navigation }: any) {
 
   const handleValidateCard = () => {
     if (!cardId.trim()) {
+      HapticFeedback.error();
       Alert.alert('Error', 'Por favor ingresa o escanea el ID de la tarjeta del pasajero.');
       return;
     }
@@ -146,12 +161,14 @@ export default function RegistroVisitaScreen({ route, navigation }: any) {
   };
 
   const handleStartScanning = async () => {
+    HapticFeedback.light();
     if (!permission) {
       return;
     }
     if (!permission.granted) {
       const response = await requestPermission();
       if (!response.granted) {
+        HapticFeedback.error();
         Alert.alert('Permiso Denegado', 'Se requiere acceso a la cámara para escanear códigos QR.');
         return;
       }
@@ -160,6 +177,7 @@ export default function RegistroVisitaScreen({ route, navigation }: any) {
   };
 
   const handleBarcodeScanned = ({ data }: { data: string }) => {
+    HapticFeedback.medium();
     setIsScanning(false);
     if (data) {
       setCardId(data);

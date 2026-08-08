@@ -13,6 +13,7 @@ import {
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
 import { Colors, Spacing } from '../constants/theme';
+import { HapticFeedback } from '../utils/Haptics';
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
@@ -22,7 +23,9 @@ export default function LoginScreen() {
   const { signIn } = useAuth();
 
   const handleLogin = async () => {
+    HapticFeedback.medium();
     if (!email || !password) {
+      HapticFeedback.error();
       setError('Por favor llene todos los campos');
       return;
     }
@@ -31,7 +34,9 @@ export default function LoginScreen() {
     setLoading(true);
     try {
       await signIn(email, password);
+      HapticFeedback.success();
     } catch (e: any) {
+      HapticFeedback.error();
       setError(e.message || 'Error al iniciar sesión');
     } finally {
       setLoading(false);

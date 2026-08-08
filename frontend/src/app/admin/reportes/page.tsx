@@ -15,7 +15,8 @@ import {
   Bus, 
   Route, 
   Loader2,
-  RefreshCw
+  RefreshCw,
+  FileSpreadsheet
 } from "lucide-react";
 import { 
   fetchReporteKPIs, 
@@ -23,6 +24,8 @@ import {
   fetchAuditoriaAsistencia,
   fetchRutas
 } from "@/lib/api";
+import { TableSkeleton } from "@/components/TableSkeleton";
+import * as XLSX from "xlsx";
 
 export default function ReportesPage() {
   const [kpis, setKpis] = useState<any>(null);
@@ -135,10 +138,60 @@ export default function ReportesPage() {
     );
   });
 
+  // Exportación Avanzada a Excel Multi-hoja con Marca Blanca
+  const handleExportExcel = () => {
+    if (filteredAsistencia.length === 0) return;
+
+    const wb = XLSX.utils.book_new();
+
+    // Hoja 1: Resumen Ejecutivo y KPIs
+    const summaryData = [
+      ["PRO MOBILE - REPORTE EJECUTIVO DE OPERACIONES Y ASISTENCIA"],
+      [`Fecha de Generación: ${new Date().toLocaleString('es-MX')}`],
+      [""],
+      ["Métrica", "Valor"],
+      ["Promedio de Ocupación de Flota", `${kpis?.promedioOcupacion || 0}%`],
+      ["Tasa General de Asistencia", `${kpis?.tasaAsistencia || 100}%`],
+      ["Total de No-Shows (Faltas)", kpis?.noShows || 0],
+      ["Pasajeros Únicos Registrados", kpis?.pasajerosUnicos || 0],
+      ["Total de Registros de Abordaje", filteredAsistencia.length]
+    ];
+    const wsSummary = XLSX.utils.aoa_to_sheet(summaryData);
+    XLSX.utils.book_append_sheet(wb, wsSummary, "Resumen Ejecutivo");
+
+    // Hoja 2: Bitácora de Abordaje Completa
+    const tableData = filteredAsistencia.map(item => ({
+      "ID Reserva": item.reserva_id,
+      "Pasajero": item.pasajero_nombre || "Pasajero",
+      "Correo Electrónico": item.pasajero_email || "N/A",
+      "Ruta": item.ruta_nombre || "Sin Nombre",
+      "Fecha y Hora": new Date(item.fecha_hora_salida).toLocaleString('es-MX'),
+      "Conductor": item.conductor_nombre || "Sin Conductor",
+      "Vehículo / Placa": item.vehiculo_patente || "S/D",
+      "Asiento": item.asiento_numero ? `#${item.asiento_numero}` : "Sin Asignar",
+      "Estado de Asistencia": item.reserva_estado === 'confirmado' ? "Abordó" : "No-Show (Faltó)"
+    }));
+    const wsTable = XLSX.utils.json_to_sheet(tableData);
+    XLSX.utils.book_append_sheet(wb, wsTable, "Bitácora de Asistencia");
+
+    // Hoja 3: Ocupación por Ruta
+    if (eficiencia.length > 0) {
+      const efData = eficiencia.map(r => ({
+        "Ruta": r.ruta_nombre,
+        "Viajes Finalizados": r.viajes_count,
+        "Promedio Ocupación (%)": `${r.promedio_ocupacion}%`
+      }));
+      const wsEf = XLSX.utils.json_to_sheet(efData);
+      XLSX.utils.book_append_sheet(wb, wsEf, "Ocupación por Ruta");
+    }
+
+    const fileName = `ProMobile_Reporte_Operaciones_${new Date().toISOString().slice(0, 10)}.xlsx`;
+    XLSX.writeFile(wb, fileName);
+  };
+
   const handleExportCSV = () => {
     if (filteredAsistencia.length === 0) return;
     
-    // CSV headers
     const headers = [
       "ID Reserva",
       "Pasajero",
@@ -151,7 +204,6 @@ export default function ReportesPage() {
       "Estado de Asistencia"
     ];
 
-    // CSV rows
     const rows = filteredAsistencia.map(item => [
       item.reserva_id,
       `"${item.pasajero_nombre}"`,
@@ -308,12 +360,20 @@ export default function ReportesPage() {
             </div>
             
             {filteredAsistencia.length > 0 && (
-              <button
-                onClick={handleExportCSV}
-                className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 shadow shadow-emerald-500/10 transition-all self-start sm:self-center"
-              >
-                <Download size={14} /> Exportar CSV
-              </button>
+              <div className="flex items-center gap-2 self-start sm:self-center">
+                <button
+                  onClick={handleExportExcel}
+                  className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-md shadow-emerald-600/20 transition-all"
+                >
+                  <FileSpreadsheet size={15} /> Exportar Excel
+                </button>
+                <button
+                  onClick={handleExportCSV}
+                  className="px-3.5 py-2 bg-slate-800 hover:bg-slate-900 active:scale-[0.98] text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-sm transition-all"
+                >
+                  <Download size={14} /> CSV
+                </button>
+              </div>
             )}
           </div>
 

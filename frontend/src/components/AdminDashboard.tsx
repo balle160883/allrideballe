@@ -21,6 +21,9 @@ import {
   createAlerta 
 } from "@/lib/api";
 
+import { DashboardCharts } from "@/components/DashboardCharts";
+import { TableSkeleton } from "@/components/TableSkeleton";
+
 interface AdminDashboardProps {
   user: any;
   isAdmin: boolean;
@@ -82,25 +85,28 @@ export default function AdminDashboard({ user, isAdmin }: AdminDashboardProps) {
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 px-2">
         <div>
-          <h1 className="text-2xl lg:text-3xl font-extrabold text-slate-900 tracking-tight">Panel de Operaciones de Transporte</h1>
-          <p className="text-slate-500 font-medium text-sm lg:text-base">Monitoreo de rutas, abordaje de personal y estado de la flota en tiempo real.</p>
+          <h1 className="text-2xl lg:text-3xl font-extrabold text-slate-900 dark:text-slate-100 tracking-tight">Panel de Operaciones de Transporte</h1>
+          <p className="text-slate-500 dark:text-slate-400 font-medium text-sm lg:text-base">Monitoreo de rutas, abordaje de personal y estado de la flota en tiempo real.</p>
         </div>
-        <div className="flex items-center gap-2 text-xs font-black bg-emerald-50 text-emerald-700 px-3 py-2 rounded-full border border-emerald-100 uppercase tracking-widest">
+        <div className="flex items-center gap-2 text-xs font-black bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 px-3 py-2 rounded-full border border-emerald-100 dark:border-emerald-800/50 uppercase tracking-widest">
           <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></div>
           SISTEMA LIVE
         </div>
       </div>
 
       {loading ? (
-        <div className="flex items-center justify-center p-12"><Loader2 className="animate-spin text-blue-600" size={36} /></div>
+        <TableSkeleton rows={5} cols={5} title="Cargando Itinerario del Día..." />
       ) : (
         <>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            <StatCard title="Viajes en Progreso" value={viajesActivos.length.toString()} icon={<Bus className="text-blue-600 animate-pulse" size={24} />} trend="Vehículos en tránsito" trendColor="text-blue-600" />
+            <StatCard title="Viajes en Progreso" value={viajesActivos.length.toString()} icon={<Bus className="text-blue-600 dark:text-blue-400 animate-pulse" size={24} />} trend="Vehículos en tránsito" trendColor="text-blue-600 dark:text-blue-400" />
             <StatCard title="Viajes Programados" value={viajesProgramados.length.toString()} icon={<Clock className="text-amber-500" size={24} />} trend="Próximos servicios" trendColor="text-amber-500" />
             <StatCard title="Ocupación Promedio" value={`${porcentajeOcupacion || 74}%`} icon={<Users className="text-emerald-500" size={24} />} trend="Asientos reservados" trendColor="text-emerald-500" />
-            <StatCard title="Alertas Activas" value={alertasActivas.length.toString()} icon={<AlertTriangle className={alertasActivas.length > 0 ? "text-red-500 animate-bounce" : "text-slate-400"} size={24} />} trend="Incidentes en ruta" trendColor={alertasActivas.length > 0 ? "text-red-600 font-bold" : "text-slate-500"} />
+            <StatCard title="Alertas Activas" value={alertasActivas.length.toString()} icon={<AlertTriangle className={alertasActivas.length > 0 ? "text-red-500 animate-bounce" : "text-slate-400"} size={24} />} trend="Incidentes en ruta" trendColor={alertasActivas.length > 0 ? "text-red-600 dark:text-red-400 font-bold" : "text-slate-500"} />
           </div>
+
+          {/* Gráficos Estadísticos del Dashboard */}
+          <DashboardCharts />
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">

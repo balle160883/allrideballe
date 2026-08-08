@@ -1,0 +1,1533 @@
+{
+  "info": {
+    "_postman_id": "a5fa3e9d-e312-4ce6-82a1-e529191d5454",
+    "name": "AllRide PRO MOBILE API",
+    "description": "Colección de Postman para probar todos los endpoints del backend de AllRide PRO MOBILE. Incluye autenticación, gestión de rutas, vehículos, conductores, pasajeros, viajes, reservas, GPS y reportes.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "54171584",
+    "_collection_link": "https://go.postman.co/collection/54171584-a5fa3e9d-e312-4ce6-82a1-e529191d5454?source=collection_link"
+  },
+  "item": [
+    {
+      "name": "00. Utilidades y Salud",
+      "item": [
+        {
+          "name": "Hola Mundo",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                ""
+              ]
+            },
+            "description": "Verifica que el servidor esté activo respondiendo con un saludo básico."
+          },
+          "response": []
+        },
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/health",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "health"
+              ]
+            },
+            "description": "Verifica el estado de salud del sistema, versión, y si hay errores de inicialización en la base de datos."
+          },
+          "response": []
+        },
+        {
+          "name": "Reset Password Admin",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/fix-admin-password",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "fix-admin-password"
+              ]
+            },
+            "description": "Establece la contraseña por defecto para el administrador principal."
+          },
+          "response": []
+        },
+        {
+          "name": "Inspeccionar Base de Datos",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/temp-check-db",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "temp-check-db"
+              ]
+            },
+            "description": "Diagnóstico rápido que retorna las tablas públicas existentes y usuarios registrados."
+          },
+          "response": []
+        },
+        {
+          "name": "Inspeccionar Viajes y Ubicaciones",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/temp-check-viajes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "temp-check-viajes"
+              ]
+            },
+            "description": "Diagnóstico rápido que retorna los últimos viajes y ubicaciones de flota grabados."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "01. Autenticación",
+      "item": [
+        {
+          "name": "Iniciar Sesión",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "if (jsonData.access_token) {",
+                  "    pm.collectionVariables.set(\"token\", jsonData.access_token);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@viaporte.com\",\n  \"password\": \"Proveedor2026@\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Inicia sesión con correo y contraseña. Al ejecutarse con éxito en Postman, guarda el token JWT automáticamente en la variable de la colección."
+          },
+          "response": []
+        },
+        {
+          "name": "Solicitar Recuperación Contraseña",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@viaporte.com\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/forgot-password",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "forgot-password"
+              ]
+            },
+            "description": "Solicita un correo electrónico con token para resetear la contraseña del usuario."
+          },
+          "response": []
+        },
+        {
+          "name": "Restablecer Contraseña con Token",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"TOKEN_ENVIADO_POR_CORREO\",\n  \"password\": \"NuevaContrasenaSegura2027@\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/reset-password",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "reset-password"
+              ]
+            },
+            "description": "Permite definir una nueva contraseña pasando el token de validación."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "03. Rutas",
+      "item": [
+        {
+          "name": "Listar Rutas",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/transporte/rutas",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transporte",
+                "rutas"
+              ]
+            },
+            "description": "Retorna todas las rutas asociadas al proveedor del usuario logueado."
+          },
+          "response": []
+        },
+        {
+          "name": "Crear Ruta",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Ruta Norte - Planta A\",\n  \"origen\": \"Terminal Centro\",\n  \"destino\": \"Planta ASVI Norte\",\n  \"puntos_polilinea\": \"_p~iF~ps|U_c@a@...\",\n  \"sede_id\": 1\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/transporte/rutas",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transporte",
+                "rutas"
+              ]
+            },
+            "description": "Crea una nueva ruta de transporte asignada a una sede."
+          },
+          "response": []
+        },
+        {
+          "name": "Actualizar Ruta",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Ruta Norte - Planta A (Modificada)\",\n  \"destino\": \"Planta ASVI Norte Bodega B\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/transporte/rutas/1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transporte",
+                "rutas",
+                "1"
+              ]
+            },
+            "description": "Edita campos de una ruta específica."
+          },
+          "response": []
+        },
+        {
+          "name": "Eliminar Ruta",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/transporte/rutas/1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transporte",
+                "rutas",
+                "1"
+              ]
+            },
+            "description": "Elimina una ruta por su identificador."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "04. Vehículos",
+      "item": [
+        {
+          "name": "Listar Vehículos",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/transporte/vehiculos",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transporte",
+                "vehiculos"
+              ]
+            },
+            "description": "Muestra los vehículos de la flota asignados al proveedor del usuario."
+          },
+          "response": []
+        },
+        {
+          "name": "Crear Vehículo",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"placa\": \"GTO-987-A\",\n  \"modelo\": \"Toyota Hiace 2024\",\n  \"capacidad\": 15,\n  \"proveedor_id\": 1\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/transporte/vehiculos",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transporte",
+                "vehiculos"
+              ]
+            },
+            "description": "Crea una nueva unidad de transporte."
+          },
+          "response": []
+        },
+        {
+          "name": "Actualizar Vehículo",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"capacidad\": 18\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/transporte/vehiculos/1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transporte",
+                "vehiculos",
+                "1"
+              ]
+            },
+            "description": "Actualiza campos de un vehículo."
+          },
+          "response": []
+        },
+        {
+          "name": "Eliminar Vehículo",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/transporte/vehiculos/1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transporte",
+                "vehiculos",
+                "1"
+              ]
+            },
+            "description": "Elimina un vehículo de la flota."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "05. Conductores y Pasajeros",
+      "item": [
+        {
+          "name": "Listar Conductores",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/transporte/conductores",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transporte",
+                "conductores"
+              ]
+            },
+            "description": "Lista de conductores autorizados para operar viajes."
+          },
+          "response": []
+        },
+        {
+          "name": "Crear Conductor",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"conductor.nuevo@viaporte.com\",\n  \"nombre\": \"Marcos Rivas Conductor\",\n  \"gestor_code\": \"VP_COND_02\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/transporte/conductores",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transporte",
+                "conductores"
+              ]
+            },
+            "description": "Registra un nuevo conductor y le crea una cuenta de acceso."
+          },
+          "response": []
+        },
+        {
+          "name": "Actualizar Conductor",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Marcos Rivas Gomez\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/transporte/conductores/UUID-DEL-CONDUCTOR",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transporte",
+                "conductores",
+                "UUID-DEL-CONDUCTOR"
+              ]
+            },
+            "description": "Modifica la información de perfil de un conductor."
+          },
+          "response": []
+        },
+        {
+          "name": "Eliminar Conductor",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/transporte/conductores/UUID-DEL-CONDUCTOR",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transporte",
+                "conductores",
+                "UUID-DEL-CONDUCTOR"
+              ]
+            },
+            "description": "Elimina a un conductor del sistema."
+          },
+          "response": []
+        },
+        {
+          "name": "Listar Pasajeros",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/transporte/pasajeros",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transporte",
+                "pasajeros"
+              ]
+            },
+            "description": "Obtiene la lista de los pasajeros (trabajadores)."
+          },
+          "response": []
+        },
+        {
+          "name": "Crear Pasajero",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"colaborador@planta.com\",\n  \"nombre\": \"Estela Garcia S.\",\n  \"identificador_tarjeta\": \"TARJETA-NFC-ESTELA-01\",\n  \"sede_id\": 1\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/transporte/pasajeros",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transporte",
+                "pasajeros"
+              ]
+            },
+            "description": "Agrega un pasajero y le asocia una sede y tarjeta de abordaje."
+          },
+          "response": []
+        },
+        {
+          "name": "Actualizar Pasajero",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"identificador_tarjeta\": \"TARJETA-NFC-ESTELA-NUEVA\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/transporte/pasajeros/UUID-DEL-PASAJERO",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transporte",
+                "pasajeros",
+                "UUID-DEL-PASAJERO"
+              ]
+            },
+            "description": "Edita datos del pasajero."
+          },
+          "response": []
+        },
+        {
+          "name": "Eliminar Pasajero",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/transporte/pasajeros/UUID-DEL-PASAJERO",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transporte",
+                "pasajeros",
+                "UUID-DEL-PASAJERO"
+              ]
+            },
+            "description": "Elimina la cuenta y perfil de un pasajero."
+          },
+          "response": []
+        },
+        {
+          "name": "Configurar Domicilio del Pasajero",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"direccion\": \"Av. Hidalgo #450, Col. Centro, Guadalajara\",\n  \"latitud\": 20.6775,\n  \"longitud\": -103.3486\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/transporte/pasajeros/domicilio",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transporte",
+                "pasajeros",
+                "domicilio"
+              ]
+            },
+            "description": "Configura la ubicación exacta de residencia del pasajero para planificar rutas inteligentes."
+          },
+          "response": []
+        },
+        {
+          "name": "Actualizar Push Token",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"push_token\": \"fcm_token_ejemplo_1234567890\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/transporte/usuarios/push-token",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transporte",
+                "usuarios",
+                "push-token"
+              ]
+            },
+            "description": "Actualiza el token del dispositivo móvil (Firebase FCM) para envío de notificaciones push."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "06. Viajes",
+      "item": [
+        {
+          "name": "Listar Viajes",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/transporte/viajes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transporte",
+                "viajes"
+              ]
+            },
+            "description": "Obtiene la lista de viajes (si es conductor se filtra para sus asignados)."
+          },
+          "response": []
+        },
+        {
+          "name": "Crear Viaje",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ruta_id\": 1,\n  \"conductor_id\": \"UUID-DEL-CONDUCTOR\",\n  \"vehiculo_id\": 1,\n  \"fecha_hora_salida\": \"2026-06-30T07:30:00.000Z\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/transporte/viajes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transporte",
+                "viajes"
+              ]
+            },
+            "description": "Programa un nuevo viaje con una ruta, conductor y vehículo específicos."
+          },
+          "response": []
+        },
+        {
+          "name": "Actualizar Estado Viaje",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"estado\": \"en_curso\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/transporte/viajes/1/estado",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transporte",
+                "viajes",
+                "1",
+                "estado"
+              ]
+            },
+            "description": "Cambia el estado de ejecución de un viaje (ej: programado -> en_curso -> finalizado)."
+          },
+          "response": []
+        },
+        {
+          "name": "Eliminar Viaje",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/transporte/viajes/1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transporte",
+                "viajes",
+                "1"
+              ]
+            },
+            "description": "Cancela/elimina un viaje del sistema."
+          },
+          "response": []
+        },
+        {
+          "name": "Viajes Disponibles Pasajero",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/transporte/viajes/disponibles",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transporte",
+                "viajes",
+                "disponibles"
+              ]
+            },
+            "description": "Obtiene la lista de viajes programados a los cuales un pasajero puede solicitar reserva."
+          },
+          "response": []
+        },
+        {
+          "name": "Abordar Pasajero (NFC)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"identificador_tarjeta\": \"TARJETA-NFC-ESTELA-01\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/transporte/viajes/1/abordar",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transporte",
+                "viajes",
+                "1",
+                "abordar"
+              ]
+            },
+            "description": "Registra el abordaje del pasajero al vehículo utilizando su identificador de tarjeta NFC."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "07. Reservas",
+      "item": [
+        {
+          "name": "Obtener Reservas del Pasajero",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/transporte/reservas/pasajero",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transporte",
+                "reservas",
+                "pasajero"
+              ]
+            },
+            "description": "Obtiene el historial de solicitudes de reserva hechas por el pasajero logueado."
+          },
+          "response": []
+        },
+        {
+          "name": "Solicitar Reserva",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"viaje_id\": 1\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/transporte/reservas/solicitar",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transporte",
+                "reservas",
+                "solicitar"
+              ]
+            },
+            "description": "Permite que un pasajero solicite un asiento para un viaje."
+          },
+          "response": []
+        },
+        {
+          "name": "Listar Reservas Pendientes",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/transporte/reservas/pendientes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transporte",
+                "reservas",
+                "pendientes"
+              ]
+            },
+            "description": "Obtiene todas las solicitudes de reservas pendientes en el sistema para que un administrador las gestione."
+          },
+          "response": []
+        },
+        {
+          "name": "Aprobar Reserva",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"notas\": \"Asiento asignado en sección delantera.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/transporte/reservas/1/aprobar",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transporte",
+                "reservas",
+                "1",
+                "aprobar"
+              ]
+            },
+            "description": "Aprueba una reserva pendiente."
+          },
+          "response": []
+        },
+        {
+          "name": "Rechazar Reserva",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"notas\": \"Vehículo lleno. Intente con otra ruta o viaje.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/transporte/reservas/1/rechazar",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transporte",
+                "reservas",
+                "1",
+                "rechazar"
+              ]
+            },
+            "description": "Rechaza una solicitud de reserva pendiente."
+          },
+          "response": []
+        },
+        {
+          "name": "Listar Reservas de un Viaje",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/transporte/viajes/1/reservas",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transporte",
+                "viajes",
+                "1",
+                "reservas"
+              ]
+            },
+            "description": "Obtiene la lista de reservas asociadas a un viaje específico."
+          },
+          "response": []
+        },
+        {
+          "name": "Crear Reserva Directa",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"viaje_id\": 1,\n  \"pasajero_id\": \"UUID-DEL-PASAJERO\",\n  \"estado\": \"aprobada\",\n  \"notas\": \"Reserva directa de admin\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/transporte/reservas",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transporte",
+                "reservas"
+              ]
+            },
+            "description": "Crea una reserva directamente sin pasar por flujo de aprobación."
+          },
+          "response": []
+        },
+        {
+          "name": "Actualizar Estado Reserva",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"estado\": \"cancelada\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/transporte/reservas/1/estado",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transporte",
+                "reservas",
+                "1",
+                "estado"
+              ]
+            },
+            "description": "Actualiza el estado de una reserva (ej: aprobada, rechazada, cancelada, abordado)."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "08. Ubicación y GPS",
+      "item": [
+        {
+          "name": "Guardar Coordenada GPS",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"viaje_id\": 1,\n  \"latitud\": 20.6775,\n  \"longitud\": -103.3486,\n  \"velocidad\": 48.5\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/transporte/locations",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transporte",
+                "locations"
+              ]
+            },
+            "description": "Registra una coordenada de telemetría de la flota (usado por la app móvil del conductor)."
+          },
+          "response": []
+        },
+        {
+          "name": "Guardar Coordenada GPS (Alias)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"viaje_id\": 1,\n  \"latitud\": 20.6780,\n  \"longitud\": -103.3490,\n  \"velocidad\": 52.0\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/transporte/viajes/location",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transporte",
+                "viajes",
+                "location"
+              ]
+            },
+            "description": "Endpoint alternativo para reportar la ubicación en tiempo real de un viaje."
+          },
+          "response": []
+        },
+        {
+          "name": "Obtener Últimas Ubicaciones",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/transporte/locations/latest",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transporte",
+                "locations",
+                "latest"
+              ]
+            },
+            "description": "Obtiene la última ubicación registrada de todos los vehículos activos para mostrar en el mapa en vivo."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "09. Alertas de Emergencia",
+      "item": [
+        {
+          "name": "Obtener Alertas",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/transporte/alertas",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transporte",
+                "alertas"
+              ]
+            },
+            "description": "Obtiene las alertas activas e históricas asociadas al proveedor."
+          },
+          "response": []
+        },
+        {
+          "name": "Crear Alerta (Pánico)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"viaje_id\": 1,\n  \"tipo\": \"Panico\",\n  \"mensaje\": \"Conductor presionó botón de auxilio\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/transporte/alertas",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transporte",
+                "alertas"
+              ]
+            },
+            "description": "Crea una alerta de emergencia desde el dispositivo de conductor o pasajero."
+          },
+          "response": []
+        },
+        {
+          "name": "Resolver Alerta",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/transporte/alertas/1/resolver",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transporte",
+                "alertas",
+                "1",
+                "resolver"
+              ]
+            },
+            "description": "Marca una alerta como resulta una vez atendida."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "11. Reportes y KPIs",
+      "item": [
+        {
+          "name": "Obtener KPIs",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/transporte/reportes/kpis",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transporte",
+                "reportes",
+                "kpis"
+              ]
+            },
+            "description": "Entrega estadísticas clave globales para el dashboard principal."
+          },
+          "response": []
+        },
+        {
+          "name": "Eficiencia de Rutas",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/transporte/reportes/eficiencia",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transporte",
+                "reportes",
+                "eficiencia"
+              ]
+            },
+            "description": "Entrega un análisis del porcentaje de ocupación y rendimiento de las rutas activas."
+          },
+          "response": []
+        },
+        {
+          "name": "Auditoría de Asistencia",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/transporte/reportes/asistencia?rutaId=1&fechaInicio=2026-06-01&fechaFin=2026-06-30",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transporte",
+                "reportes",
+                "asistencia"
+              ],
+              "query": [
+                {
+                  "key": "rutaId",
+                  "value": "1"
+                },
+                {
+                  "key": "fechaInicio",
+                  "value": "2026-06-01"
+                },
+                {
+                  "key": "fechaFin",
+                  "value": "2026-06-30"
+                }
+              ]
+            },
+            "description": "Obtiene la bitácora de asistencia de abordaje de pasajeros filtrado opcionalmente por ruta y rango de fechas."
+          },
+          "response": []
+        },
+        {
+          "name": "Reporte SLA",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/transporte/reportes/sla",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transporte",
+                "reportes",
+                "sla"
+              ]
+            },
+            "description": "Obtiene métricas de puntualidad y cumplimiento del servicio (SLA)."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "12. Catálogos",
+      "item": [
+        {
+          "name": "Listar Proveedores (Compañías)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/transporte/catalogo-proveedores",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transporte",
+                "catalogo-proveedores"
+              ]
+            },
+            "description": "Lista general de proveedores de transporte registrados en el sistema."
+          },
+          "response": []
+        },
+        {
+          "name": "Crear Proveedor",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Transportes ASVI\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/transporte/catalogo-proveedores",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transporte",
+                "catalogo-proveedores"
+              ]
+            },
+            "description": "Registra una nueva empresa proveedora de transporte."
+          },
+          "response": []
+        },
+        {
+          "name": "Actualizar Proveedor",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Transportes ASVI S.A. de C.V.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/transporte/catalogo-proveedores/1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transporte",
+                "catalogo-proveedores",
+                "1"
+              ]
+            },
+            "description": "Edita el nombre o datos de un proveedor de transporte."
+          },
+          "response": []
+        },
+        {
+          "name": "Eliminar Proveedor",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/transporte/catalogo-proveedores/1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transporte",
+                "catalogo-proveedores",
+                "1"
+              ]
+            },
+            "description": "Elimina del catálogo a un proveedor de transporte."
+          },
+          "response": []
+        },
+        {
+          "name": "Listar Sedes (Plantas de Clientes)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/transporte/catalogo-sedes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transporte",
+                "catalogo-sedes"
+              ]
+            },
+            "description": "Obtiene la lista de sedes de plantas de clientes asignadas al proveedor."
+          },
+          "response": []
+        },
+        {
+          "name": "Crear Sede",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Cliente Planta ASVI Guadalajara\",\n  \"proveedor_id\": 1\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/transporte/catalogo-sedes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transporte",
+                "catalogo-sedes"
+              ]
+            },
+            "description": "Crea una nueva sede cliente para recibir/recoger personal."
+          },
+          "response": []
+        },
+        {
+          "name": "Actualizar Sede",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Cliente Planta ASVI Zapopan\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/transporte/catalogo-sedes/1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transporte",
+                "catalogo-sedes",
+                "1"
+              ]
+            },
+            "description": "Actualiza la información de una sede cliente."
+          },
+          "response": []
+        },
+        {
+          "name": "Eliminar Sede",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/transporte/catalogo-sedes/1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transporte",
+                "catalogo-sedes",
+                "1"
+              ]
+            },
+            "description": "Elimina del catálogo una sede cliente."
+          },
+          "response": []
+        }
+      ]
+    }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://2.24.81.205:4000",
+      "type": "string"
+    },
+    {
+      "key": "token",
+      "value": "INGRESA_AQUI_EL_JWT_OBTENIDO",
+      "type": "string"
+    }
+  ]
+}

@@ -143,8 +143,8 @@ export function Sidebar({ isOpen, onClose }: { isOpen?: boolean, onClose?: () =>
         )}
 
         <div className={`
-          w-64 bg-slate-900 text-white h-screen fixed left-0 top-0 flex flex-col shadow-2xl z-40
-          transition-transform duration-300 ease-in-out
+          w-64 bg-slate-900 dark:bg-[#070b14] text-white h-screen fixed left-0 top-0 flex flex-col shadow-2xl z-40
+          transition-transform duration-300 ease-in-out border-r border-slate-800/80
           ${isOpen ? 'translate-x-0' : '-translate-x-full'}
           lg:translate-x-0
         `}>

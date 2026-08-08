@@ -1,6 +1,7 @@
 import { useState } from 'react';
+import { AppConfig } from '../constants/config';
 
-const MAPBOX_ACCESS_TOKEN = 'pk.eyJ1IjoiZGpiYjE2MDg4MyIsImEiOiJjbW4zY2o0dTUwOGdxMnFvYmJwZ2xzbnUwIn0.Yv7408j9tAieaX-YB-vAwg';
+const MAPBOX_ACCESS_TOKEN = AppConfig.mapboxAccessToken;
 
 export function useDirections() {
   const [route, setRoute] = useState<any>(null);

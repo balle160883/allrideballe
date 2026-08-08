@@ -9,8 +9,11 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../api/backend';
 import * as Speech from 'expo-speech';
+import { useSmoothLocation } from '../hooks/useSmoothLocation';
+import { useGeofenceAlert } from '../hooks/useGeofenceAlert';
+import { AppConfig } from '../constants/config';
 
-const MAPBOX_ACCESS_TOKEN = 'pk.eyJ1IjoiZGpiYjE2MDg4MyIsImEiOiJjbW4zY2o0dTUwOGdxMnFvYmJwZ2xzbnUwIn0.Yv7408j9tAieaX-YB-vAwg';
+const MAPBOX_ACCESS_TOKEN = AppConfig.mapboxAccessToken;
 Mapbox.setAccessToken(MAPBOX_ACCESS_TOKEN);
 
 // Helper para calcular la distancia en metros entre dos coordenadas [lng, lat]
@@ -141,6 +144,31 @@ export default function MapaScreen({ route: routeProp, navigation }: any) {
   const [snappedHeading, setSnappedHeading] = useState<number>(0);
   const cameraRef = useRef<Mapbox.Camera>(null);
   const prevViajesLengthRef = useRef<number>(viajes.length);
+
+  const isConductor = user?.rol === 'conductor';
+
+  // Coordenadas objetivo en bruto del autobús seleccionado
+  const rawBusCoords = useMemo<[number, number] | null>(() => {
+    if (!selectedViaje) return null;
+    if (selectedViaje.ultima_ubicacion?.longitud && selectedViaje.ultima_ubicacion?.latitud) {
+      return [selectedViaje.ultima_ubicacion.longitud, selectedViaje.ultima_ubicacion.latitud];
+    }
+    if (selectedViaje.paradas?.[0]?.longitud && selectedViaje.paradas?.[0]?.latitud) {
+      return [selectedViaje.paradas[0].longitud, selectedViaje.paradas[0].latitud];
+    }
+    return null;
+  }, [selectedViaje]);
+
+  // 1. Suavizado de movimiento en el mapa (Interpolación lineal fluida a 60 FPS)
+  const { smoothCoords: busLocation } = useSmoothLocation(rawBusCoords, 3000);
+
+  // 2. Alertas por Geocerca (Geofencing) a 500m para los pasajeros
+  const { nearbyParada } = useGeofenceAlert(
+    busLocation || rawBusCoords,
+    selectedViaje?.paradas,
+    isMuted,
+    !isConductor
+  );
 
   const formatTripTime = (timeMs: number) => {
     if (!timeMs) return '';
@@ -291,7 +319,6 @@ export default function MapaScreen({ route: routeProp, navigation }: any) {
     }
   };
 
-  const isConductor = user?.rol === 'conductor';
   const viajesActivos = viajes.filter(v => v.viaje_estado === 'en_ruta' || v.viaje_estado === 'programado');
   const viajeActivo = viajesActivos[0] || null;
 
@@ -632,6 +659,15 @@ export default function MapaScreen({ route: routeProp, navigation }: any) {
 
   return (
     <View style={styles.container}>
+      {/* Banner Flotante de Geocerca (Alerta a 500 metros) */}
+      {nearbyParada && (
+        <View style={styles.geofenceBanner}>
+          <MaterialCommunityIcons name="bus-clock" size={20} color="#ffffff" />
+          <Text style={styles.geofenceBannerText}>
+            Autobús cerca: a {(nearbyParada.distance).toFixed(0)}m de "{nearbyParada.parada.nombre}"
+          </Text>
+        </View>
+      )}
       <Mapbox.MapView style={styles.map} logoEnabled={false} attributionEnabled={false} styleURL={Mapbox.StyleURL.Dark}>
         <Mapbox.Camera
           ref={cameraRef}
@@ -700,7 +736,7 @@ export default function MapaScreen({ route: routeProp, navigation }: any) {
               <Mapbox.MarkerView
                 key={`bus-selected-${selectedViaje.id}`}
                 id={`bus-selected-${selectedViaje.id}`}
-                coordinate={loc}
+                coordinate={busLocation || loc}
               >
                 <View style={styles.markerBusSelectedContainer}>
                   <View style={styles.markerBus}>
@@ -1744,5 +1780,30 @@ const styles = StyleSheet.create({
     color: Colors.success,
     fontWeight: '900',
     fontSize: 16,
+  },
+  geofenceBanner: {
+    position: 'absolute',
+    top: 50,
+    left: 16,
+    right: 16,
+    zIndex: 999,
+    backgroundColor: '#0284c7', // Azul brillante de alerta informativa
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    elevation: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.3,
+    shadowRadius: 5,
+  },
+  geofenceBannerText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '800',
+    flex: 1,
   },
 });
