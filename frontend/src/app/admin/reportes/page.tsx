@@ -16,7 +16,9 @@ import {
   Route, 
   Loader2,
   RefreshCw,
-  FileSpreadsheet
+  FileSpreadsheet,
+  FileText,
+  Printer
 } from "lucide-react";
 import { 
   fetchReporteKPIs, 
@@ -231,6 +233,111 @@ export default function ReportesPage() {
     document.body.removeChild(link);
   };
 
+  // Exportación Ejecutiva a PDF con Marca Blanca Pro Mobile
+  const handleExportPDF = () => {
+    if (filteredAsistencia.length === 0) return;
+
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
+
+    const logoUrl = '/pm-azul.png';
+    const fechaGen = new Date().toLocaleString('es-MX', { dateStyle: 'full', timeStyle: 'short' });
+
+    const htmlContent = `
+      <!DOCTYPE html>
+      <html lang="es">
+      <head>
+        <meta charset="UTF-8">
+        <title>Reporte Ejecutivo de Operaciones - Pro Mobile</title>
+        <style>
+          @page { size: A4; margin: 15mm; }
+          body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; color: #1e293b; margin: 0; padding: 0; font-size: 11px; }
+          .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #0284c7; padding-bottom: 12px; margin-bottom: 20px; }
+          .logo { height: 42px; width: auto; }
+          .title { text-align: right; }
+          .title h1 { margin: 0; font-size: 18px; color: #0f172a; text-transform: uppercase; letter-spacing: 0.5px; }
+          .title p { margin: 2px 0 0 0; color: #64748b; font-size: 10px; font-weight: bold; }
+          .kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 20px; }
+          .kpi-card { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px; text-align: center; }
+          .kpi-card .val { font-size: 18px; font-weight: 800; color: #0284c7; margin-top: 4px; }
+          .kpi-card .lbl { font-size: 9px; color: #64748b; text-transform: uppercase; font-weight: bold; }
+          section { margin-bottom: 20px; }
+          section h2 { font-size: 12px; text-transform: uppercase; color: #0f172a; border-left: 4px solid #0284c7; padding-left: 8px; margin-bottom: 8px; }
+          table { width: 100%; border-collapse: collapse; margin-top: 6px; }
+          th { background: #f1f5f9; color: #475569; text-align: left; padding: 6px 8px; font-size: 9px; text-transform: uppercase; border-bottom: 1px solid #cbd5e1; }
+          td { padding: 6px 8px; border-bottom: 1px solid #e2e8f0; font-size: 10px; }
+          tr:nth-child(even) { background: #f8fafc; }
+          .badge { display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 9px; font-weight: bold; text-transform: uppercase; }
+          .badge-ok { background: #dcfce7; color: #15803d; }
+          .badge-noshow { background: #ffe4e6; color: #be123c; }
+          .footer { margin-top: 30px; border-top: 1px solid #e2e8f0; padding-top: 10px; text-align: center; font-size: 9px; color: #94a3b8; }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <img src="${logoUrl}" class="logo" alt="Pro Mobile" onerror="this.style.display='none'" />
+          <div class="title">
+            <h1>Reporte Ejecutivo de Operaciones</h1>
+            <p>Pro Mobile Transport Engine · ${fechaGen}</p>
+          </div>
+        </div>
+
+        <div class="kpi-grid">
+          <div class="kpi-card"><div class="lbl">Ocupación Flota</div><div class="val">${kpis?.promedioOcupacion || 0}%</div></div>
+          <div class="kpi-card"><div class="lbl">Tasa Asistencia</div><div class="val">${kpis?.tasaAsistencia || 100}%</div></div>
+          <div class="kpi-card"><div class="lbl">No-Shows</div><div class="val">${kpis?.noShows || 0}</div></div>
+          <div class="kpi-card"><div class="lbl">Pasajeros Únicos</div><div class="val">${kpis?.pasajerosUnicos || 0}</div></div>
+        </div>
+
+        <section>
+          <h2>Bitácora de Abordaje y Asistencia (${filteredAsistencia.length} registros)</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>Pasajero</th>
+                <th>Ruta</th>
+                <th>Fecha / Hora</th>
+                <th>Conductor</th>
+                <th>Placa</th>
+                <th>Asiento</th>
+                <th>Estado</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${filteredAsistencia.map(item => `
+                <tr>
+                  <td><strong>${item.pasajero_nombre}</strong><br/><span style="color:#64748b; font-size:9px;">${item.pasajero_email}</span></td>
+                  <td>${item.ruta_nombre}</td>
+                  <td>${new Date(item.fecha_hora_salida).toLocaleString('es-MX')}</td>
+                  <td>${item.conductor_nombre || 'S/D'}</td>
+                  <td>${item.vehiculo_patente || 'S/D'}</td>
+                  <td>${item.asiento_numero ? `#${item.asiento_numero}` : '-'}</td>
+                  <td>
+                    ${item.reserva_estado === 'confirmado' 
+                      ? '<span class="badge badge-ok">Abordó</span>' 
+                      : '<span class="badge badge-noshow">No-Show</span>'}
+                  </td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </section>
+
+        <div class="footer">
+          Documento generado automáticamente por la Plataforma de Monitoreo Pro Mobile · Todos los derechos reservados.
+        </div>
+
+        <script>
+          window.onload = function() { window.print(); };
+        </script>
+      </body>
+      </html>
+    `;
+
+    printWindow.document.write(htmlContent);
+    printWindow.document.close();
+  };
+
   // Color helper for route occupancy progress bars
   const getOccupancyColor = (pct: number) => {
     if (pct < 40) return { bar: "bg-red-500", text: "text-red-600", bg: "bg-red-50", desc: "Baja Ocupación" };
@@ -361,6 +468,12 @@ export default function ReportesPage() {
             
             {filteredAsistencia.length > 0 && (
               <div className="flex items-center gap-2 self-start sm:self-center">
+                <button
+                  onClick={handleExportPDF}
+                  className="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 active:scale-[0.98] text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-md shadow-blue-600/20 transition-all"
+                >
+                  <FileText size={15} /> Reporte PDF
+                </button>
                 <button
                   onClick={handleExportExcel}
                   className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-md shadow-emerald-600/20 transition-all"

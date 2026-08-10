@@ -11,7 +11,12 @@ import {
   CheckCircle, 
   X, 
   Loader2, 
-  MapPin 
+  MapPin,
+  Filter,
+  Building,
+  Sun,
+  Sunset,
+  Moon
 } from "lucide-react";
 import { 
   fetchViajes, 
@@ -42,6 +47,8 @@ export default function AdminDashboard({ user, isAdmin }: AdminDashboardProps) {
   const [alertaTipo, setAlertaTipo] = useState("retraso");
   const [alertaDesc, setAlertaDesc] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
+  const [selectedTurno, setSelectedTurno] = useState<string>("todos");
+  const [selectedEmpresa, setSelectedEmpresa] = useState<string>("todas");
   const router = useRouter();
 
   const loadData = async () => {
@@ -69,8 +76,30 @@ export default function AdminDashboard({ user, isAdmin }: AdminDashboardProps) {
     return () => clearInterval(interval);
   }, []);
 
-  const safeViajes = Array.isArray(viajes) ? viajes : [];
+  const safeViajesAll = Array.isArray(viajes) ? viajes : [];
   const safeAlertas = Array.isArray(alertas) ? alertas : [];
+
+  // Filtrado dinámico por Turno y Empresa Cliente
+  const safeViajes = safeViajesAll.filter(v => {
+    // Filtro por Turno
+    if (selectedTurno !== 'todos' && v.fecha_hora_salida) {
+      const hour = new Date(v.fecha_hora_salida).getHours();
+      if (selectedTurno === 'matutino' && (hour < 5 || hour >= 13)) return false;
+      if (selectedTurno === 'vespertino' && (hour < 13 || hour >= 21)) return false;
+      if (selectedTurno === 'nocturno' && (hour >= 5 && hour < 21)) return false;
+    }
+    // Filtro por Empresa
+    if (selectedEmpresa !== 'todas') {
+      const empNombre = v.empresa_nombre || v.cliente_nombre || '';
+      if (!empNombre.toLowerCase().includes(selectedEmpresa.toLowerCase())) return false;
+    }
+    return true;
+  });
+
+  const empresasUnicas = Array.from(
+    new Set(safeViajesAll.map(v => v.empresa_nombre || v.cliente_nombre).filter(Boolean))
+  );
+
   const viajesActivos = safeViajes.filter(v => v.estado === 'en_progreso' || v.estado === 'en_ruta');
   const viajesProgramados = safeViajes.filter(v => v.estado === 'programado');
   const alertasActivas = safeAlertas.filter(a => !a.resuelta);
@@ -100,6 +129,55 @@ export default function AdminDashboard({ user, isAdmin }: AdminDashboardProps) {
           <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></div>
           SISTEMA LIVE
         </div>
+      </div>
+
+      {/* Píldoras de Filtro Avanzado: Turno y Empresa Cliente */}
+      <div className="bg-white dark:bg-slate-900 p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3 shadow-sm">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-xs font-bold text-slate-400 dark:text-slate-500 flex items-center gap-1 uppercase tracking-wider text-[10px]">
+            <Filter size={14} /> Turno Operativo:
+          </span>
+          <button
+            onClick={() => setSelectedTurno('todos')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${selectedTurno === 'todos' ? 'bg-blue-600 text-white shadow-md shadow-blue-600/20' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200'}`}
+          >
+            Todos los Turnos
+          </button>
+          <button
+            onClick={() => setSelectedTurno('matutino')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all ${selectedTurno === 'matutino' ? 'bg-amber-500 text-white shadow-md shadow-amber-500/20' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200'}`}
+          >
+            <Sun size={13} /> Matutino (05-13h)
+          </button>
+          <button
+            onClick={() => setSelectedTurno('vespertino')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all ${selectedTurno === 'vespertino' ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200'}`}
+          >
+            <Sunset size={13} /> Vespertino (13-21h)
+          </button>
+          <button
+            onClick={() => setSelectedTurno('nocturno')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all ${selectedTurno === 'nocturno' ? 'bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 shadow-md' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200'}`}
+          >
+            <Moon size={13} /> Nocturno (21-05h)
+          </button>
+        </div>
+
+        {empresasUnicas.length > 0 && (
+          <div className="flex items-center gap-2">
+            <Building size={14} className="text-slate-400" />
+            <select
+              value={selectedEmpresa}
+              onChange={(e) => setSelectedEmpresa(e.target.value)}
+              className="p-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-300 outline-none"
+            >
+              <option value="todas">Todas las Empresas / Sedes</option>
+              {empresasUnicas.map((emp: any) => (
+                <option key={emp} value={emp}>{emp}</option>
+              ))}
+            </select>
+          </div>
+        )}
       </div>
 
       {loading ? (
