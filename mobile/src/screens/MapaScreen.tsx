@@ -12,6 +12,7 @@ import * as Speech from 'expo-speech';
 import { useSmoothLocation } from '../hooks/useSmoothLocation';
 import { useGeofenceAlert } from '../hooks/useGeofenceAlert';
 import { AppConfig } from '../constants/config';
+import { RatingModal } from '../components/RatingModal';
 
 const MAPBOX_ACCESS_TOKEN = AppConfig.mapboxAccessToken;
 Mapbox.setAccessToken(MAPBOX_ACCESS_TOKEN);
@@ -144,6 +145,7 @@ export default function MapaScreen({ route: routeProp, navigation }: any) {
   const [snappedHeading, setSnappedHeading] = useState<number>(0);
   const cameraRef = useRef<Mapbox.Camera>(null);
   const prevViajesLengthRef = useRef<number>(viajes.length);
+  const [ratingModalVisible, setRatingModalVisible] = useState(false);
 
   const isConductor = user?.rol === 'conductor';
 
@@ -963,6 +965,16 @@ export default function MapaScreen({ route: routeProp, navigation }: any) {
                     <Text style={styles.navButtonText}>Escanear QR</Text>
                   </TouchableOpacity>
                 )}
+
+                {!isConductor && selectedViaje && (
+                  <TouchableOpacity 
+                    style={[styles.navButton, { backgroundColor: '#f59e0b', flex: 1.5 }]} 
+                    onPress={() => setRatingModalVisible(true)}
+                  >
+                    <MaterialCommunityIcons name="star" color="#fff" size={20} />
+                    <Text style={styles.navButtonText}>Calificar</Text>
+                  </TouchableOpacity>
+                )}
              </View>
            )}
         </View>
@@ -1156,7 +1168,14 @@ export default function MapaScreen({ route: routeProp, navigation }: any) {
             </View>
           )}
         </View>
-      </Modal>
+      {/* Modal de Calificación de Servicio al Pasajero */}
+      <RatingModal
+        visible={ratingModalVisible}
+        viajeId={selectedViaje?.id || null}
+        rutaNombre={selectedViaje?.ruta_nombre}
+        conductorNombre={selectedViaje?.conductor_nombre}
+        onClose={() => setRatingModalVisible(false)}
+      />
     </View>
   );
 }

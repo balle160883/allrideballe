@@ -97,5 +97,79 @@ export const OfflineService = {
 
     // Actualizar almacenamiento local con lo que no se pudo sincronizar
     await AsyncStorage.setItem(PENDING_GESTIONES_KEY, JSON.stringify(remaining));
+  },
+
+  // ==========================================
+  // VALIDADOR QR OFFLINE Y CACHÉ DE PASAJEROS
+  // ==========================================
+  async cacheTripPasajeros(viajeId: number, pasajeros: any[]) {
+    try {
+      const key = `@passengers_viaje_${viajeId}`;
+      await AsyncStorage.setItem(key, JSON.stringify(pasajeros));
+      console.log(`[OfflineService] Guardados ${pasajeros.length} pasajeros en caché local para el viaje ${viajeId}`);
+    } catch (e) {
+      console.error('[OfflineService] Error guardando pasajeros en caché:', e);
+    }
+  },
+
+  async validateQROffline(viajeId: number, qrToken: string) {
+    try {
+      const key = `@passengers_viaje_${viajeId}`;
+      const data = await AsyncStorage.getItem(key);
+      if (!data) return { valid: false, message: 'No hay lista de pasajeros guardada para validar offline' };
+
+      const pasajeros: any[] = JSON.parse(data);
+      const match = pasajeros.find(p => p.qr_code === qrToken || p.reserva_id?.toString() === qrToken || p.pasajero_id?.toString() === qrToken);
+
+      if (match) {
+        return { valid: true, pasajero: match };
+      }
+      return { valid: false, message: 'Código QR no encontrado en el itinerario de este viaje' };
+    } catch (e: any) {
+      return { valid: false, message: e.message };
+    }
+  },
+
+  async saveQRAbordajeOffline(reservaId: number, viajeId: number) {
+    try {
+      const key = '@pending_abordajes_qr';
+      const existingStr = await AsyncStorage.getItem(key);
+      const existing = existingStr ? JSON.parse(existingStr) : [];
+      const newScan = { reservaId, viajeId, timestamp: new Date().toISOString() };
+      await AsyncStorage.setItem(key, JSON.stringify([...existing, newScan]));
+      console.log('[OfflineService] Abordaje QR guardado en cola local para sincronización');
+    } catch (e) {
+      console.error('[OfflineService] Error al guardar abordaje QR offline:', e);
+    }
+  },
+
+  async syncPendingAbordajes() {
+    const key = '@pending_abordajes_qr';
+    try {
+      const data = await AsyncStorage.getItem(key);
+      if (!data) return;
+      const pending: any[] = JSON.parse(data);
+      if (pending.length === 0) return;
+
+      if (!(await this.isOnline())) return;
+
+      console.log(`[OfflineService] Sincronizando ${pending.length} abordajes QR acumulados...`);
+      const remaining: any[] = [];
+
+      for (const item of pending) {
+        try {
+          await api.post('/transporte/asistencia', {
+            reserva_id: item.reservaId,
+            estado: 'confirmado'
+          });
+        } catch {
+          remaining.push(item);
+        }
+      }
+
+      await AsyncStorage.setItem(key, JSON.stringify(remaining));
+    } catch (e) {
+      console.error('[OfflineService] Error sincronizando abordajes:', e);
+    }
   }
 };

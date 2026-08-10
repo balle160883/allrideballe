@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Alert } from 'react-native';
 import * as Speech from 'expo-speech';
+import * as Notifications from 'expo-notifications';
 import { HapticFeedback } from '../utils/Haptics';
 import { Parada } from './useVisitas';
 
@@ -58,13 +59,25 @@ export function useGeofenceAlert(
         // Feedback háptico
         HapticFeedback.success();
 
-        // Alerta de Voz (TTS)
+        // 1. Notificación Push de Proximidad en Segundo Plano (Sonido + Vibración)
+        Notifications.scheduleNotificationAsync({
+          content: {
+            title: '🚌 ¡Tu transporte se aproxima!',
+            body: `El vehículo se encuentra a ${(dist).toFixed(0)}m de la parada "${parada.nombre}". Prepárate para abordar.`,
+            sound: true,
+            vibrate: [0, 250, 250, 250],
+            priority: Notifications.AndroidNotificationPriority.HIGH,
+          },
+          trigger: null,
+        }).catch(err => console.log('Proximity notification error:', err?.message));
+
+        // 2. Alerta de Voz (TTS)
         if (!isMuted) {
           const text = `Atención: El autobús se aproxima a la parada ${parada.nombre}, a menos de 500 metros.`;
           Speech.speak(text, { language: 'es' });
         }
 
-        // Alerta Popup en pantalla
+        // 3. Alerta Popup en pantalla
         Alert.alert(
           '🚌 Autobús Cercano',
           `El autobús se encuentra a ${(dist).toFixed(0)} metros de la parada "${parada.nombre}".`
