@@ -124,11 +124,9 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
           "created_at" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
 
-        -- Poblar catálogos iniciales
-        INSERT INTO "proveedores" ("nombre") VALUES ('Transportes del Valle') ON CONFLICT DO NOTHING;
-        INSERT INTO "proveedores" ("nombre") VALUES ('Autobuses de Occidente') ON CONFLICT DO NOTHING;
-        INSERT INTO "sedes" ("nombre") VALUES ('Planta Industrial Norte') ON CONFLICT DO NOTHING;
-        INSERT INTO "sedes" ("nombre") VALUES ('Campus Tecnológico Sur') ON CONFLICT DO NOTHING;
+        -- Poblar catálogos oficiales: Proveedor ASVI y Cliente Flex Norte
+        INSERT INTO "proveedores" ("nombre") VALUES ('ASVI') ON CONFLICT DO NOTHING;
+        INSERT INTO "sedes" ("nombre") VALUES ('Flex Norte') ON CONFLICT DO NOTHING;
 
         -- Agregar llaves foráneas a usuarios, vehículos, rutas y viajes
         ALTER TABLE "usuarios" ADD COLUMN IF NOT EXISTS "proveedor_id" INTEGER REFERENCES "proveedores"("id") ON DELETE SET NULL;
@@ -155,6 +153,65 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
             END IF;
         END $$;
       `);
+
+      // Poblar usuarios de prueba oficiales (Proveedor ASVI, Cliente Flex Norte, Conductor y 2 Pasajeros)
+      const provIdRes = await client.query(`SELECT id FROM "proveedores" WHERE nombre = 'ASVI' LIMIT 1`);
+      const sedeIdRes = await client.query(`SELECT id FROM "sedes" WHERE nombre = 'Flex Norte' LIMIT 1`);
+      const provId = provIdRes.rows[0]?.id;
+      const sedeId = sedeIdRes.rows[0]?.id;
+
+      if (provId) {
+        // Conductor ASVI
+        const condPass = await bcrypt.hash('Conductor2026@', 10);
+        await client.query(`
+          INSERT INTO "usuarios" ("email", "password_hash", "nombre", "rol", "proveedor_id")
+          VALUES ('conductor.asvi@allride.com', $1, 'Carlos Conductor ASVI', 'conductor', $2)
+          ON CONFLICT (email) DO UPDATE SET proveedor_id = $2, rol = 'conductor';
+        `, [condPass, provId]);
+
+        // Vehículo ASVI
+        await client.query(`
+          INSERT INTO "vehiculos" ("patente", "modelo", "capacidad", "proveedor_id")
+          VALUES ('ASVI-001', 'Mercedes Sprinter 2026', 40, $1)
+          ON CONFLICT (patente) DO NOTHING;
+        `, [provId]);
+
+        // Licencia Renta Mensual ASVI (400 usuarios -> $17,500 MXN + IVA)
+        await client.query(`
+          INSERT INTO "rentas_mensuales" ("cliente_email", "status", "monto", "fecha_ultimo_pago", "proximo_vencimiento", "proveedor_id")
+          VALUES ('admin@asvi.com', 'activo', 17500, CURRENT_DATE, CURRENT_DATE + INTERVAL '1 month', $1)
+          ON CONFLICT (cliente_email) DO UPDATE SET monto = 17500, status = 'activo', proveedor_id = $1;
+        `, [provId]);
+      }
+
+      if (sedeId && provId) {
+        // 2 Empleados en Flex Norte
+        const pasPass = await bcrypt.hash('Pasajero2026@', 10);
+        await client.query(`
+          INSERT INTO "usuarios" ("email", "password_hash", "nombre", "rol", "sede_id", "proveedor_id")
+          VALUES ('empleado1.flex@allride.com', $1, 'Ana Torres (Flex Norte)', 'pasajero', $2, $3)
+          ON CONFLICT (email) DO UPDATE SET sede_id = $2, proveedor_id = $3;
+        `, [pasPass, sedeId, provId]);
+
+        await client.query(`
+          INSERT INTO "usuarios" ("email", "password_hash", "nombre", "rol", "sede_id", "proveedor_id")
+          VALUES ('empleado2.flex@allride.com', $1, 'Luis Gómez (Flex Norte)', 'pasajero', $2, $3)
+          ON CONFLICT (email) DO UPDATE SET sede_id = $2, proveedor_id = $3;
+        `, [pasPass, sedeId, provId]);
+
+        // Ruta Flex Norte
+        await client.query(`
+          INSERT INTO "rutas" ("nombre", "origen", "destino", "paradas", "sede_id")
+          VALUES (
+            'Ruta Flex Norte Directo', 
+            'Terminal ASVI', 
+            'Planta Flex Norte', 
+            '[{"nombre": "Parada 1 - Av. Industrial", "lat": 20.6597, "lng": -103.3496}, {"nombre": "Planta Flex Norte", "lat": 20.6736, "lng": -103.3551}]'::jsonb,
+            $1
+          )
+          ON CONFLICT DO NOTHING;
+        `, [sedeId]);
+      }
       
       await client.query('COMMIT');
       this.logger.log('Esquema de base de datos inicializado y actualizado correctamente.');
