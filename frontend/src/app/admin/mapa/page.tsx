@@ -10,11 +10,7 @@ import {
   RefreshCw, ArrowLeft, Search, Filter, Volume2, ShieldAlert
 } from 'lucide-react';
 
-const HARDCODED_MAPBOX_TOKEN = 'pk.eyJ1IjoiZGpiYjE2MDg4MyIsImEiOiJjbW4zY2o0dTUwOGdxMnFvYmJwZ2xzbnUwIn0.Yv7408j9tAieaX-YB-vAwg';
-const envToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN?.trim();
-const MAPBOX_TOKEN = (envToken && envToken.startsWith('pk.') && envToken.length > 40)
-  ? envToken
-  : HARDCODED_MAPBOX_TOKEN;
+const MAPBOX_TOKEN = 'pk.eyJ1IjoiZGpiYjE2MDg4MyIsImEiOiJjbW4zY2o0dTUwOGdxMnFvYmJwZ2xzbnUwIn0.Yv7408j9tAieaX-YB-vAwg';
 const REFRESH_INTERVAL_MS = 5000;
 
 const MAP_STYLES: Record<string, string> = {
@@ -268,10 +264,7 @@ export default function FleetMapPage() {
   // ── Inicializar mapa ─────────────────────────────────────────────────────────
   useEffect(() => {
     if (!mapContainer.current) return;
-    const validToken = (MAPBOX_TOKEN && MAPBOX_TOKEN.startsWith('pk.') && MAPBOX_TOKEN.length > 40)
-      ? MAPBOX_TOKEN
-      : HARDCODED_MAPBOX_TOKEN;
-    mapboxgl.accessToken = validToken;
+    mapboxgl.accessToken = MAPBOX_TOKEN;
 
     const m = new mapboxgl.Map({
       container: mapContainer.current,
