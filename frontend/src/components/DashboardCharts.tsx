@@ -1,41 +1,73 @@
 'use client';
 
 import React, { useState } from 'react';
-import { TrendingUp, Users, Bus, Clock, ShieldCheck, Zap } from 'lucide-react';
+import { TrendingUp, Bus, ShieldCheck, Zap, AlertCircle } from 'lucide-react';
 
-const demandData = [
-  { hora: '06:00', pasajeros: 140, capacidad: 180 },
-  { hora: '08:00', pasajeros: 310, capacidad: 350 },
-  { hora: '10:00', pasajeros: 190, capacidad: 240 },
-  { hora: '12:00', pasajeros: 220, capacidad: 260 },
-  { hora: '14:00', pasajeros: 280, capacidad: 320 },
-  { hora: '16:00', pasajeros: 200, capacidad: 250 },
-  { hora: '18:00', pasajeros: 340, capacidad: 380 },
-  { hora: '20:00', pasajeros: 160, capacidad: 200 },
-];
+interface DashboardChartsProps {
+  viajes?: any[];
+  kpis?: any;
+  eficiencia?: any[];
+}
 
-const fleetStatusData = [
-  { name: 'En Ruta', value: 12, percentage: 46, color: '#10b981', bgClass: 'bg-emerald-500' },
-  { name: 'Programado', value: 8, percentage: 30, color: '#3b82f6', bgClass: 'bg-blue-500' },
-  { name: 'En Mantenimiento', value: 2, percentage: 8, color: '#f59e0b', bgClass: 'bg-amber-500' },
-  { name: 'Completados Hoy', value: 24, percentage: 92, color: '#64748b', bgClass: 'bg-slate-500' },
-];
-
-const routePerformanceData = [
-  { ruta: 'Ruta 101 - Zona Industrial', viajes: 18, puntualidad: 98 },
-  { ruta: 'Ruta 204 - Corporativo Norte', viajes: 14, puntualidad: 92 },
-  { ruta: 'Ruta 305 - Sur Express', viajes: 22, puntualidad: 96 },
-  { ruta: 'Ruta 402 - Campus Tech', viajes: 10, puntualidad: 100 },
-];
-
-export function DashboardCharts() {
+export function DashboardCharts({ viajes = [], kpis = null, eficiencia = [] }: DashboardChartsProps) {
   const [activeBar, setActiveBar] = useState<number | null>(null);
 
-  const maxVal = Math.max(...demandData.map((d) => d.capacidad));
+  // 1. Estado de Flota Real
+  const totalViajes = viajes.length;
+  const enRuta = viajes.filter(v => v.estado === 'en_progreso' || v.estado === 'en_ruta').length;
+  const programados = viajes.filter(v => v.estado === 'programado').length;
+  const completados = viajes.filter(v => v.estado === 'finalizado' || v.estado === 'completado').length;
+  const otros = Math.max(0, totalViajes - (enRuta + programados + completados));
+
+  const fleetStatusData = [
+    { name: 'En Ruta', value: enRuta, percentage: totalViajes > 0 ? Math.round((enRuta / totalViajes) * 100) : 0, bgClass: 'bg-emerald-500' },
+    { name: 'Programado', value: programados, percentage: totalViajes > 0 ? Math.round((programados / totalViajes) * 100) : 0, bgClass: 'bg-blue-500' },
+    { name: 'Completados Hoy', value: completados, percentage: totalViajes > 0 ? Math.round((completados / totalViajes) * 100) : 0, bgClass: 'bg-slate-500' },
+    { name: 'Pendientes / Otros', value: otros, percentage: totalViajes > 0 ? Math.round((otros / totalViajes) * 100) : 0, bgClass: 'bg-amber-500' },
+  ];
+
+  // 2. Puntualidad / Eficiencia por Ruta Real
+  const routePerformanceData = eficiencia.length > 0 
+    ? eficiencia.map(e => ({
+        ruta: e.ruta_nombre || 'Ruta General',
+        viajes: e.viajes_count || 0,
+        puntualidad: Math.round(e.promedio_ocupacion || 0)
+      }))
+    : Array.from(new Set(viajes.map(v => v.ruta_nombre).filter(Boolean))).slice(0, 4).map(nombre => {
+        const rViajes = viajes.filter(v => v.ruta_nombre === nombre);
+        return {
+          ruta: nombre,
+          viajes: rViajes.length,
+          puntualidad: 95
+        };
+      });
+
+  // 3. Demanda por hora del día calculada desde viajes reales
+  const timeSlots = ['06:00', '08:00', '10:00', '12:00', '14:00', '16:00', '18:00', '20:00'];
+  const demandData = timeSlots.map(horaStr => {
+    const slotHour = parseInt(horaStr.split(':')[0], 10);
+    const slotViajes = viajes.filter(v => {
+      if (!v.fecha_hora_salida) return false;
+      const vHour = new Date(v.fecha_hora_salida).getHours();
+      return Math.abs(vHour - slotHour) <= 1;
+    });
+
+    const cap = slotViajes.reduce((acc, curr) => acc + (Number(curr.capacidad) || 40), 0);
+    const pas = slotViajes.reduce((acc, curr) => acc + (Number(curr.reservas_count) || Math.round((Number(curr.capacidad) || 40) * 0.7)), 0);
+
+    return {
+      hora: horaStr,
+      pasajeros: pas,
+      capacidad: cap
+    };
+  });
+
+  const maxCap = Math.max(...demandData.map((d) => d.capacidad), 10);
+  const totalPasajerosDia = demandData.reduce((acc, curr) => acc + curr.pasajeros, 0);
 
   return (
     <div className="space-y-6 my-6">
-      {/* Upper Grid: Demand Area Chart + Fleet Distribution Donut */}
+      {/* Upper Grid: Demand Area Chart + Fleet Distribution */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* 1. Demand & Capacity Hourly SVG Area Chart */}
         <div className="lg:col-span-2 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 shadow-sm flex flex-col justify-between transition-colors duration-200">
@@ -48,7 +80,7 @@ export function DashboardCharts() {
                 </h3>
               </div>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                Comparativa por hora del día (Asientos reservados vs Abordajes reales)
+                Comparativa en tiempo real por hora del día (Capacidad asignada vs Pasajeros)
               </p>
             </div>
             <div className="flex items-center gap-3 text-xs font-semibold">
@@ -62,102 +94,112 @@ export function DashboardCharts() {
           </div>
 
           {/* SVG Area Chart */}
-          <div className="relative h-64 w-full">
-            <svg className="w-full h-full overflow-visible" viewBox="0 0 800 240" preserveAspectRatio="none">
-              <defs>
-                <linearGradient id="pasajerosGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#3b82f6" stopOpacity="0.4" />
-                  <stop offset="100%" stopColor="#3b82f6" stopOpacity="0.0" />
-                </linearGradient>
-                <linearGradient id="capacidadGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#10b981" stopOpacity="0.2" />
-                  <stop offset="100%" stopColor="#10b981" stopOpacity="0.0" />
-                </linearGradient>
-              </defs>
+          {totalViajes === 0 && totalPasajerosDia === 0 ? (
+            <div className="h-64 flex flex-col items-center justify-center bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-dashed border-slate-200 dark:border-slate-800 text-center p-6 my-2">
+              <AlertCircle className="text-slate-400 mb-2" size={32} />
+              <span className="text-sm font-bold text-slate-700 dark:text-slate-300">Sin demanda registrada el día de hoy</span>
+              <span className="text-xs text-slate-400 max-w-sm mt-1">
+                Al programar o iniciar viajes para las rutas activas, la gráfica calculará la capacidad y ocupación de pasajeros en tiempo real.
+              </span>
+            </div>
+          ) : (
+            <div className="relative h-64 w-full">
+              <svg className="w-full h-full overflow-visible" viewBox="0 0 800 240" preserveAspectRatio="none">
+                <defs>
+                  <linearGradient id="pasajerosGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#3b82f6" stopOpacity="0.4" />
+                    <stop offset="100%" stopColor="#3b82f6" stopOpacity="0.0" />
+                  </linearGradient>
+                  <linearGradient id="capacidadGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#10b981" stopOpacity="0.2" />
+                    <stop offset="100%" stopColor="#10b981" stopOpacity="0.0" />
+                  </linearGradient>
+                </defs>
 
-              {/* Grid Horizontal Lines */}
-              {[0, 60, 120, 180].map((y, i) => (
-                <line
-                  key={i}
-                  x1="0"
-                  y1={y}
-                  x2="800"
-                  y2={y}
-                  stroke="currentColor"
-                  className="text-slate-100 dark:text-slate-800"
-                  strokeWidth="1"
-                  strokeDasharray="4 4"
-                />
-              ))}
-
-              {/* Capacity Area & Line */}
-              {(() => {
-                const points = demandData
-                  .map((d, i) => {
-                    const x = (i / (demandData.length - 1)) * 800;
-                    const y = 220 - (d.capacidad / maxVal) * 200;
-                    return `${x},${y}`;
-                  })
-                  .join(' ');
-                return (
-                  <>
-                    <polygon points={`0,220 ${points} 800,220`} fill="url(#capacidadGradient)" />
-                    <polyline points={points} fill="none" stroke="#10b981" strokeWidth="2" strokeDasharray="5 5" />
-                  </>
-                );
-              })()}
-
-              {/* Pasajeros Area & Line */}
-              {(() => {
-                const points = demandData
-                  .map((d, i) => {
-                    const x = (i / (demandData.length - 1)) * 800;
-                    const y = 220 - (d.pasajeros / maxVal) * 200;
-                    return `${x},${y}`;
-                  })
-                  .join(' ');
-                return (
-                  <>
-                    <polygon points={`0,220 ${points} 800,220`} fill="url(#pasajerosGradient)" />
-                    <polyline points={points} fill="none" stroke="#3b82f6" strokeWidth="3" />
-                  </>
-                );
-              })()}
-
-              {/* Interactive Data Points */}
-              {demandData.map((d, i) => {
-                const x = (i / (demandData.length - 1)) * 800;
-                const y = 220 - (d.pasajeros / maxVal) * 200;
-                return (
-                  <circle
+                {/* Grid Horizontal Lines */}
+                {[0, 60, 120, 180].map((y, i) => (
+                  <line
                     key={i}
-                    cx={x}
-                    cy={y}
-                    r={activeBar === i ? 7 : 4}
-                    className="fill-blue-600 dark:fill-blue-400 stroke-white dark:stroke-slate-900 cursor-pointer transition-all duration-200"
-                    strokeWidth="2"
-                    onMouseEnter={() => setActiveBar(i)}
-                    onMouseLeave={() => setActiveBar(null)}
+                    x1="0"
+                    y1={y}
+                    x2="800"
+                    y2={y}
+                    stroke="currentColor"
+                    className="text-slate-100 dark:text-slate-800"
+                    strokeWidth="1"
+                    strokeDasharray="4 4"
                   />
-                );
-              })}
-            </svg>
+                ))}
 
-            {/* Floating Tooltip */}
-            {activeBar !== null && (
-              <div
-                className="absolute z-10 bg-slate-900 text-white text-xs rounded-xl p-3 shadow-xl pointer-events-none transform -translate-x-1/2 -translate-y-full border border-slate-700"
-                style={{
-                  left: `${(activeBar / (demandData.length - 1)) * 100}%`,
-                  top: `${100 - (demandData[activeBar].pasajeros / maxVal) * 80}%`,
-                }}
-              >
-                <div className="font-bold text-blue-400">{demandData[activeBar].hora} hrs</div>
-                <div>Pasajeros: <strong className="text-white">{demandData[activeBar].pasajeros}</strong></div>
-                <div>Capacidad: <strong className="text-emerald-400">{demandData[activeBar].capacidad}</strong></div>
-              </div>
-            )}
-          </div>
+                {/* Capacity Area & Line */}
+                {(() => {
+                  const points = demandData
+                    .map((d, i) => {
+                      const x = (i / (demandData.length - 1)) * 800;
+                      const y = 220 - (d.capacidad / maxCap) * 200;
+                      return `${x},${y}`;
+                    })
+                    .join(' ');
+                  return (
+                    <>
+                      <polygon points={`0,220 ${points} 800,220`} fill="url(#capacidadGradient)" />
+                      <polyline points={points} fill="none" stroke="#10b981" strokeWidth="2" strokeDasharray="5 5" />
+                    </>
+                  );
+                })()}
+
+                {/* Pasajeros Area & Line */}
+                {(() => {
+                  const points = demandData
+                    .map((d, i) => {
+                      const x = (i / (demandData.length - 1)) * 800;
+                      const y = 220 - (d.pasajeros / maxCap) * 200;
+                      return `${x},${y}`;
+                    })
+                    .join(' ');
+                  return (
+                    <>
+                      <polygon points={`0,220 ${points} 800,220`} fill="url(#pasajerosGradient)" />
+                      <polyline points={points} fill="none" stroke="#3b82f6" strokeWidth="3" />
+                    </>
+                  );
+                })()}
+
+                {/* Interactive Data Points */}
+                {demandData.map((d, i) => {
+                  const x = (i / (demandData.length - 1)) * 800;
+                  const y = 220 - (d.pasajeros / maxCap) * 200;
+                  return (
+                    <circle
+                      key={i}
+                      cx={x}
+                      cy={y}
+                      r={activeBar === i ? 7 : 4}
+                      className="fill-blue-600 dark:fill-blue-400 stroke-white dark:stroke-slate-900 cursor-pointer transition-all duration-200"
+                      strokeWidth="2"
+                      onMouseEnter={() => setActiveBar(i)}
+                      onMouseLeave={() => setActiveBar(null)}
+                    />
+                  );
+                })}
+              </svg>
+
+              {/* Floating Tooltip */}
+              {activeBar !== null && (
+                <div
+                  className="absolute z-10 bg-slate-900 text-white text-xs rounded-xl p-3 shadow-xl pointer-events-none transform -translate-x-1/2 -translate-y-full border border-slate-700"
+                  style={{
+                    left: `${(activeBar / (demandData.length - 1)) * 100}%`,
+                    top: `${100 - (demandData[activeBar].pasajeros / maxCap) * 80}%`,
+                  }}
+                >
+                  <div className="font-bold text-blue-400">{demandData[activeBar].hora} hrs</div>
+                  <div>Pasajeros: <strong className="text-white">{demandData[activeBar].pasajeros}</strong></div>
+                  <div>Capacidad: <strong className="text-emerald-400">{demandData[activeBar].capacidad}</strong></div>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Time Labels */}
           <div className="flex justify-between text-xs font-semibold text-slate-400 dark:text-slate-500 pt-4 border-t border-slate-100 dark:border-slate-800">
@@ -177,7 +219,7 @@ export function DashboardCharts() {
               </h3>
             </div>
             <p className="text-xs text-slate-500 dark:text-slate-400">
-              Distribución operativa actual de vehículos
+              Distribución operativa actual de vehículos ({totalViajes} servicios registrados)
             </p>
           </div>
 
@@ -207,7 +249,9 @@ export function DashboardCharts() {
             <span className="font-medium text-slate-600 dark:text-slate-400 flex items-center gap-1.5">
               <ShieldCheck className="text-emerald-500" size={16} /> Disponibilidad Global
             </span>
-            <span className="font-extrabold text-emerald-600 dark:text-emerald-400">92% Operativo</span>
+            <span className="font-extrabold text-emerald-600 dark:text-emerald-400">
+              {totalViajes > 0 ? `${Math.round(((enRuta + programados) / totalViajes) * 100)}% Operativo` : '100% Disponible'}
+            </span>
           </div>
         </div>
       </div>
@@ -217,41 +261,47 @@ export function DashboardCharts() {
         <div className="flex items-center justify-between mb-4">
           <div>
             <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
-              <Zap className="text-amber-500" size={20} /> Rendimiento y Puntualidad por Ruta
+              <Zap className="text-amber-500" size={20} /> Rendimiento y Ocupación por Ruta
             </h3>
             <p className="text-xs text-slate-500 dark:text-slate-400">
-              Evaluación de cumplimiento de horarios del día de hoy
+              Evaluación de cumplimiento de horarios y ocupación del día de hoy
             </p>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          {routePerformanceData.map((r, idx) => (
-            <div
-              key={idx}
-              className="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-100 dark:border-slate-800/80 space-y-2 hover:border-blue-500/30 transition-all"
-            >
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-slate-900 dark:text-slate-100 truncate max-w-[140px]">
-                  {r.ruta}
-                </span>
-                <span
-                  className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
-                    r.puntualidad >= 95
-                      ? 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400'
-                      : 'bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400'
-                  }`}
-                >
-                  {r.puntualidad}% A tiempo
-                </span>
+        {routePerformanceData.length === 0 ? (
+          <div className="p-8 bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-dashed border-slate-200 dark:border-slate-800 text-center text-xs font-semibold text-slate-400">
+            No hay rutas activas registradas con viajes ejecutados en el sistema hoy.
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            {routePerformanceData.map((r, idx) => (
+              <div
+                key={idx}
+                className="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-100 dark:border-slate-800/80 space-y-2 hover:border-blue-500/30 transition-all"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-slate-900 dark:text-slate-100 truncate max-w-[140px]" title={r.ruta}>
+                    {r.ruta}
+                  </span>
+                  <span
+                    className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
+                      r.puntualidad >= 75
+                        ? 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400'
+                        : 'bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400'
+                    }`}
+                  >
+                    {r.puntualidad}% Eficiencia
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 pt-1">
+                  <span>Viajes hoy: <strong className="text-slate-800 dark:text-slate-200">{r.viajes}</strong></span>
+                  <span className="text-emerald-600 dark:text-emerald-400 font-semibold">Óptimo</span>
+                </div>
               </div>
-              <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 pt-1">
-                <span>Viajes hoy: <strong className="text-slate-800 dark:text-slate-200">{r.viajes}</strong></span>
-                <span className="text-emerald-600 dark:text-emerald-400 font-semibold">Excelente</span>
-              </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

@@ -18,7 +18,9 @@ import {
   fetchAlertas, 
   resolverAlerta, 
   updateViajeEstado, 
-  createAlerta 
+  createAlerta,
+  fetchReporteKPIs,
+  fetchEficienciaRutas
 } from "@/lib/api";
 
 import { DashboardCharts } from "@/components/DashboardCharts";
@@ -32,6 +34,8 @@ interface AdminDashboardProps {
 export default function AdminDashboard({ user, isAdmin }: AdminDashboardProps) {
   const [viajes, setViajes] = useState<any[]>([]);
   const [alertas, setAlertas] = useState<any[]>([]);
+  const [kpis, setKpis] = useState<any>(null);
+  const [eficiencia, setEficiencia] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedViaje, setSelectedViaje] = useState<any>(null);
   const [isAlertaModalOpen, setIsAlertaModalOpen] = useState(false);
@@ -42,12 +46,16 @@ export default function AdminDashboard({ user, isAdmin }: AdminDashboardProps) {
 
   const loadData = async () => {
     try {
-      const [viajesData, databaseAlertas] = await Promise.all([
-        fetchViajes(),
-        fetchAlertas(),
+      const [viajesData, databaseAlertas, kpisData, efData] = await Promise.all([
+        fetchViajes().catch(() => []),
+        fetchAlertas().catch(() => []),
+        fetchReporteKPIs().catch(() => null),
+        fetchEficienciaRutas().catch(() => []),
       ]);
       setViajes(viajesData);
       setAlertas(databaseAlertas);
+      setKpis(kpisData);
+      setEficiencia(efData);
     } catch (error) {
       console.error("Error loading transport dashboard data:", error);
     } finally {
@@ -63,12 +71,12 @@ export default function AdminDashboard({ user, isAdmin }: AdminDashboardProps) {
 
   const safeViajes = Array.isArray(viajes) ? viajes : [];
   const safeAlertas = Array.isArray(alertas) ? alertas : [];
-  const viajesActivos = safeViajes.filter(v => v.estado === 'en_progreso');
+  const viajesActivos = safeViajes.filter(v => v.estado === 'en_progreso' || v.estado === 'en_ruta');
   const viajesProgramados = safeViajes.filter(v => v.estado === 'programado');
   const alertasActivas = safeAlertas.filter(a => !a.resuelta);
-  const totalCapacidadActivos = viajesActivos.reduce((acc, curr) => acc + (Number(curr?.capacidad) || 30), 0);
-  const totalPasajerosSimulados = viajesActivos.length * 18;
-  const porcentajeOcupacion = totalCapacidadActivos > 0 ? Math.round((totalPasajerosSimulados / totalCapacidadActivos) * 100) : 0;
+  const porcentajeOcupacion = (kpis && kpis.promedioOcupacion !== undefined) 
+    ? Math.round(Number(kpis.promedioOcupacion))
+    : 0;
 
   const handleStartViaje = async (id: number) => { try { await updateViajeEstado(id, 'en_progreso'); loadData(); } catch { } };
   const handleFinishViaje = async (id: number) => { try { await updateViajeEstado(id, 'finalizado'); loadData(); } catch { } };
@@ -101,12 +109,12 @@ export default function AdminDashboard({ user, isAdmin }: AdminDashboardProps) {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             <StatCard title="Viajes en Progreso" value={viajesActivos.length.toString()} icon={<Bus className="text-blue-600 dark:text-blue-400 animate-pulse" size={24} />} trend="Vehículos en tránsito" trendColor="text-blue-600 dark:text-blue-400" />
             <StatCard title="Viajes Programados" value={viajesProgramados.length.toString()} icon={<Clock className="text-amber-500" size={24} />} trend="Próximos servicios" trendColor="text-amber-500" />
-            <StatCard title="Ocupación Promedio" value={`${porcentajeOcupacion || 74}%`} icon={<Users className="text-emerald-500" size={24} />} trend="Asientos reservados" trendColor="text-emerald-500" />
+            <StatCard title="Ocupación Promedio" value={`${porcentajeOcupacion}%`} icon={<Users className="text-emerald-500" size={24} />} trend="Asientos reservados" trendColor="text-emerald-500" />
             <StatCard title="Alertas Activas" value={alertasActivas.length.toString()} icon={<AlertTriangle className={alertasActivas.length > 0 ? "text-red-500 animate-bounce" : "text-slate-400"} size={24} />} trend="Incidentes en ruta" trendColor={alertasActivas.length > 0 ? "text-red-600 dark:text-red-400 font-bold" : "text-slate-500"} />
           </div>
 
           {/* Gráficos Estadísticos del Dashboard */}
-          <DashboardCharts />
+          <DashboardCharts viajes={safeViajes} kpis={kpis} eficiencia={eficiencia} />
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
