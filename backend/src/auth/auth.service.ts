@@ -17,9 +17,10 @@ export class AuthService {
 
   async validateUser(email: string, pass: string): Promise<any> {
     try {
+      const emailClean = email ? email.trim().toLowerCase() : '';
       const result = await this.databaseService.query(
-        'SELECT id, email, password_hash, nombre, rol, identificador_tarjeta, gestor_code AS gestor, proveedor_id, sede_id FROM usuarios WHERE email = $1',
-        [email]
+        'SELECT id, email, password_hash, nombre, rol, identificador_tarjeta, gestor_code AS gestor, proveedor_id, sede_id FROM usuarios WHERE LOWER(email) = $1',
+        [emailClean]
       );
 
       const users = result.rows;

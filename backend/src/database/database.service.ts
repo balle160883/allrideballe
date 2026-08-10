@@ -161,12 +161,18 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
       const sedeId = sedeIdRes.rows[0]?.id;
 
       if (provId) {
-        // Conductor ASVI
+        // Conductores ASVI
         const condPass = await bcrypt.hash('Conductor2026@', 10);
         await client.query(`
           INSERT INTO "usuarios" ("email", "password_hash", "nombre", "rol", "proveedor_id")
           VALUES ('conductor.asvi@allride.com', $1, 'Carlos Conductor ASVI', 'conductor', $2)
-          ON CONFLICT (email) DO UPDATE SET proveedor_id = $2, rol = 'conductor';
+          ON CONFLICT (email) DO UPDATE SET password_hash = $1, proveedor_id = $2, rol = 'conductor';
+        `, [condPass, provId]);
+
+        await client.query(`
+          INSERT INTO "usuarios" ("email", "password_hash", "nombre", "rol", "proveedor_id")
+          VALUES ('conductor1@allride.com', $1, 'Conductor Oficial ASVI 1', 'conductor', $2)
+          ON CONFLICT (email) DO UPDATE SET password_hash = $1, proveedor_id = $2, rol = 'conductor';
         `, [condPass, provId]);
 
         // Vehículo ASVI
