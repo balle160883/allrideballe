@@ -323,24 +323,40 @@ export default function RentaPage() {
             </div>
             
             <div className="p-6 space-y-5">
-              {!selectedRenta?.id && (
-                <div className="grid grid-cols-2 gap-2 mb-2">
+              {/* Selector de Plan SaaS por Volumen de Usuarios ($43.75 MXN + IVA/u) */}
+              <div className="space-y-2 bg-indigo-50/60 dark:bg-indigo-950/40 p-3.5 rounded-2xl border border-indigo-100 dark:border-indigo-900/50">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-black uppercase text-indigo-700 dark:text-indigo-300 tracking-wider">
+                    Tarifario B2B por Usuario Activo ($43.75 MXN + IVA/mes)
+                  </span>
+                  <span className="text-[10px] font-bold text-indigo-600 bg-white dark:bg-slate-900 px-2 py-0.5 rounded-full border border-indigo-200">
+                    ~$1.45 MXN / día / usuario
+                  </span>
+                </div>
+                <div className="grid grid-cols-3 gap-2">
                   <button 
-                    onClick={() => setPlan(3500)}
-                    className={`p-2 rounded-xl border-2 text-center transition-all ${selectedRenta?.monto === 3500 ? 'border-indigo-600 bg-indigo-50 text-indigo-700' : 'border-slate-100 text-slate-400'}`}
+                    onClick={() => setSelectedRenta({ ...selectedRenta, num_usuarios: 200, monto: Math.round(200 * 43.75) })}
+                    className={`p-2 rounded-xl border text-center transition-all ${selectedRenta?.num_usuarios === 200 || selectedRenta?.monto === 8750 ? 'border-indigo-600 bg-indigo-600 text-white font-bold' : 'bg-white dark:bg-slate-900 border-slate-200 text-slate-700 hover:bg-indigo-50'}`}
                   >
-                    <div className="text-[10px] font-black uppercase">Plan Base</div>
-                    <div className="text-lg font-black">$3,500</div>
+                    <div className="text-[9px] uppercase font-black">200 Usuarios</div>
+                    <div className="text-sm font-extrabold">$8,750</div>
                   </button>
                   <button 
-                    onClick={() => setPlan(6500)}
-                    className={`p-2 rounded-xl border-2 text-center transition-all ${selectedRenta?.monto === 6500 ? 'border-purple-600 bg-purple-50 text-purple-700' : 'border-slate-100 text-slate-400'}`}
+                    onClick={() => setSelectedRenta({ ...selectedRenta, num_usuarios: 400, monto: Math.round(400 * 43.75) })}
+                    className={`p-2 rounded-xl border text-center transition-all ${selectedRenta?.num_usuarios === 400 || selectedRenta?.monto === 17500 ? 'border-indigo-600 bg-indigo-600 text-white font-bold' : 'bg-white dark:bg-slate-900 border-slate-200 text-slate-700 hover:bg-indigo-50'}`}
                   >
-                    <div className="text-[10px] font-black uppercase">Plan Pro</div>
-                    <div className="text-lg font-black">$6,500</div>
+                    <div className="text-[9px] uppercase font-black">400 Usuarios</div>
+                    <div className="text-sm font-extrabold">$17,500</div>
+                  </button>
+                  <button 
+                    onClick={() => setSelectedRenta({ ...selectedRenta, num_usuarios: 800, monto: Math.round(800 * 43.75) })}
+                    className={`p-2 rounded-xl border text-center transition-all ${selectedRenta?.num_usuarios === 800 || selectedRenta?.monto === 35000 ? 'border-indigo-600 bg-indigo-600 text-white font-bold' : 'bg-white dark:bg-slate-900 border-slate-200 text-slate-700 hover:bg-indigo-50'}`}
+                  >
+                    <div className="text-[9px] uppercase font-black">800 Usuarios</div>
+                    <div className="text-sm font-extrabold">$35,000</div>
                   </button>
                 </div>
-              )}
+              </div>
 
               {/* PROVEEDOR VINCULADO */}
               <div className="space-y-1">
@@ -383,16 +399,35 @@ export default function RentaPage() {
                 </div>
               </div>
 
-              <div className="space-y-1">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Monto de Renta (MXN)</label>
-                <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold">$</span>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">N° Usuarios Activos</label>
                   <input 
                     type="number" 
-                    value={selectedRenta?.monto}
-                    onChange={(e) => setSelectedRenta({...selectedRenta, monto: Number(e.target.value)})}
-                    className="w-full bg-slate-50 border-slate-200 rounded-xl py-2.5 pl-8 pr-4 text-sm focus:ring-2 focus:ring-indigo-500/20 transition-all font-black text-indigo-600"
+                    value={selectedRenta?.num_usuarios || 400}
+                    onChange={(e) => {
+                      const n = Number(e.target.value);
+                      setSelectedRenta({
+                        ...selectedRenta,
+                        num_usuarios: n,
+                        monto: Math.round(n * 43.75)
+                      });
+                    }}
+                    className="w-full bg-slate-50 border-slate-200 rounded-xl py-2.5 px-3 text-sm focus:ring-2 focus:ring-indigo-500/20 font-bold text-slate-800"
+                    placeholder="400"
                   />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Monto Renta Mensual (MXN)</label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold">$</span>
+                    <input 
+                      type="number" 
+                      value={selectedRenta?.monto}
+                      onChange={(e) => setSelectedRenta({...selectedRenta, monto: Number(e.target.value)})}
+                      className="w-full bg-slate-50 border-slate-200 rounded-xl py-2.5 pl-8 pr-4 text-sm focus:ring-2 focus:ring-indigo-500/20 font-black text-indigo-600"
+                    />
+                  </div>
                 </div>
               </div>
 
