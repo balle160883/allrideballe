@@ -697,23 +697,44 @@ export class TransporteService {
 
   async getLatestLocations() {
     const result = await this.databaseService.query(`
-      SELECT DISTINCT ON (v.id) 
+      SELECT * FROM (
+        SELECT DISTINCT ON (uf.viaje_id) 
+          uf.viaje_id, 
+          uf.latitud, 
+          uf.longitud, 
+          COALESCE(uf.velocidad, 0) as velocidad, 
+          uf.timestamp,
+          COALESCE(r.nombre, 'Ruta sin nombre') as ruta_nombre, 
+          COALESCE(ve.patente, 'S/D') as patente, 
+          COALESCE(u.nombre, 'Conductor') as conductor_nombre,
+          COALESCE(v.estado, 'en_ruta') as viaje_estado
+        FROM "ubicaciones_flota" uf
+        LEFT JOIN "viajes" v ON uf.viaje_id = v.id
+        LEFT JOIN "rutas" r ON v.ruta_id = r.id
+        LEFT JOIN "vehiculos" ve ON v.vehiculo_id = ve.id
+        LEFT JOIN "usuarios" u ON v.conductor_id = u.id
+        WHERE uf.timestamp >= NOW() - INTERVAL '24 hours'
+        ORDER BY uf.viaje_id, uf.timestamp DESC
+      ) q1
+      UNION ALL
+      SELECT 
         v.id as viaje_id,
-        COALESCE(uf.latitud, r.origen_latitud, 20.6736) as latitud,
-        COALESCE(uf.longitud, r.origen_longitud, -103.3496) as longitud,
-        COALESCE(uf.velocidad, 0) as velocidad,
-        COALESCE(uf.timestamp, NOW()) as timestamp,
-        COALESCE(r.nombre, 'Ruta sin nombre') as ruta_nombre, 
-        COALESCE(ve.patente, 'S/D') as patente, 
-        COALESCE(u.nombre, 'Conductor no asignado') as conductor_nombre,
+        20.6736 as latitud,
+        -103.3496 as longitud,
+        0 as velocidad,
+        NOW() as timestamp,
+        COALESCE(r.nombre, 'Ruta sin nombre') as ruta_nombre,
+        COALESCE(ve.patente, 'S/D') as patente,
+        COALESCE(u.nombre, 'Conductor') as conductor_nombre,
         v.estado as viaje_estado
       FROM "viajes" v
-      LEFT JOIN "ubicaciones_flota" uf ON uf.viaje_id = v.id
       LEFT JOIN "rutas" r ON v.ruta_id = r.id
       LEFT JOIN "vehiculos" ve ON v.vehiculo_id = ve.id
       LEFT JOIN "usuarios" u ON v.conductor_id = u.id
-      WHERE v.estado IN ('en_ruta', 'programado', 'iniciado', 'en_curso', 'activo')
-      ORDER BY v.id, uf.timestamp DESC NULLS LAST
+      WHERE v.estado IN ('programado', 'en_ruta')
+        AND v.id NOT IN (
+          SELECT DISTINCT viaje_id FROM "ubicaciones_flota" WHERE timestamp >= NOW() - INTERVAL '24 hours' AND viaje_id IS NOT NULL
+        )
     `);
     return result.rows;
   }
