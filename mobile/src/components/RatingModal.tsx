@@ -7,7 +7,7 @@ import { HapticFeedback } from '../utils/Haptics';
 
 interface RatingModalProps {
   visible: boolean;
-  viajeId: number | null;
+  viajeId: number | string | null;
   rutaNombre?: string;
   conductorNombre?: string;
   onClose: () => void;

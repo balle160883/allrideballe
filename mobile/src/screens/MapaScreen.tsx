@@ -1168,6 +1168,8 @@ export default function MapaScreen({ route: routeProp, navigation }: any) {
             </View>
           )}
         </View>
+      </Modal>
+
       {/* Modal de Calificación de Servicio al Pasajero */}
       <RatingModal
         visible={ratingModalVisible}
