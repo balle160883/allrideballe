@@ -1521,27 +1521,24 @@ export class TransporteService {
       FROM (
         SELECT 
           v.id, 
-          ve.capacidad,
-          (SELECT COUNT(*)::int FROM "reservas" r WHERE r.viaje_id = v.id AND r.estado IN ('reservado', 'confirmado', 'no_abordado')) as ocupados
+          COALESCE(ve.capacidad, 40) as capacidad,
+          (SELECT COUNT(*)::int FROM "reservas" r WHERE r.viaje_id = v.id) as ocupados
         FROM "viajes" v
-        JOIN "vehiculos" ve ON v.vehiculo_id = ve.id
-        WHERE v.estado = 'finalizado'
+        LEFT JOIN "vehiculos" ve ON v.vehiculo_id = ve.id
       ) q
     `;
-    const queryViajes = `SELECT COUNT(*)::int as total_viajes FROM "viajes" WHERE estado = 'finalizado'`;
+    const queryViajes = `SELECT COUNT(*)::int as total_viajes FROM "viajes"`;
     const queryAsistencia = `
       SELECT 
-        COUNT(CASE WHEN r.estado = 'confirmado' THEN 1 END)::int as abordados,
+        COUNT(CASE WHEN r.estado IN ('confirmado', 'abordado') THEN 1 END)::int as abordados,
         COUNT(CASE WHEN r.estado = 'no_abordado' THEN 1 END)::int as no_shows
       FROM "reservas" r
       JOIN "viajes" v ON r.viaje_id = v.id
-      WHERE v.estado = 'finalizado' AND r.estado IN ('confirmado', 'no_abordado')
     `;
     const queryPasajeros = `
       SELECT COUNT(DISTINCT r.pasajero_id)::int as pasajeros_unicos 
       FROM "reservas" r
       JOIN "viajes" v ON r.viaje_id = v.id
-      WHERE v.estado = 'finalizado' AND r.estado = 'confirmado'
     `;
 
     const [resOcupacion, resViajes, resAsistencia, resPasajeros] = await Promise.all([
@@ -1578,12 +1575,11 @@ export class TransporteService {
         ru.nombre as ruta_nombre,
         COUNT(v.id)::int as viajes_count,
         COALESCE(AVG(
-          (SELECT COUNT(*)::int FROM "reservas" r WHERE r.viaje_id = v.id AND r.estado IN ('reservado', 'confirmado', 'no_abordado')) * 100.0 / NULLIF(ve.capacidad, 0)
+          (SELECT COUNT(*)::int FROM "reservas" r WHERE r.viaje_id = v.id) * 100.0 / NULLIF(COALESCE(ve.capacidad, 40), 0)
         ), 0)::float as promedio_ocupacion
       FROM "viajes" v
       JOIN "rutas" ru ON v.ruta_id = ru.id
-      JOIN "vehiculos" ve ON v.vehiculo_id = ve.id
-      WHERE v.estado = 'finalizado'
+      LEFT JOIN "vehiculos" ve ON v.vehiculo_id = ve.id
       GROUP BY ru.id, ru.nombre
       ORDER BY promedio_ocupacion DESC
     `;
@@ -1601,8 +1597,8 @@ export class TransporteService {
         r.asiento_numero,
         r.estado as reserva_estado,
         r.fecha_aprobacion,
-        u.nombre as pasajero_nombre,
-        u.email as pasajero_email,
+        COALESCE(u.nombre, u.email, 'Pasajero') as pasajero_nombre,
+        COALESCE(u.email, 'sin-email@promobile.com') as pasajero_email,
         ru.nombre as ruta_nombre,
         v.fecha_hora_salida,
         c.nombre as conductor_nombre,
@@ -1613,7 +1609,7 @@ export class TransporteService {
       JOIN "rutas" ru ON v.ruta_id = ru.id
       LEFT JOIN "usuarios" c ON v.conductor_id = c.id
       LEFT JOIN "vehiculos" ve ON v.vehiculo_id = ve.id
-      WHERE v.estado = 'finalizado' AND r.estado IN ('confirmado', 'no_abordado')
+      WHERE 1=1
     `;
     const params: any[] = [];
     let paramCounter = 1;
