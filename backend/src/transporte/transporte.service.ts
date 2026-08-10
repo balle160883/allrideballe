@@ -1,12 +1,16 @@
 import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { DatabaseService } from '../database/database.service';
+import { TransporteGateway } from './transporte.gateway';
 import * as bcrypt from 'bcrypt';
 
 @Injectable()
 export class TransporteService {
   private readonly logger = new Logger(TransporteService.name);
 
-  constructor(private readonly databaseService: DatabaseService) {}
+  constructor(
+    private readonly databaseService: DatabaseService,
+    private readonly transporteGateway: TransporteGateway,
+  ) {}
 
   // ==========================================
   // RUTAS
@@ -601,12 +605,27 @@ export class TransporteService {
       [viajeId, data.latitud, data.longitud, data.velocidad || 0]
     );
 
+    const savedRow = result.rows[0];
+
+    // Transmisión instantánea por WebSockets a mapas conectados en el frontend
+    try {
+      this.transporteGateway.broadcastLocationUpdate({
+        viaje_id: viajeId,
+        latitud: Number(data.latitud),
+        longitud: Number(data.longitud),
+        velocidad: Number(data.velocidad || 0),
+        timestamp: savedRow?.timestamp || new Date().toISOString()
+      });
+    } catch (wsErr: any) {
+      this.logger.error(`Error al emitir evento WebSocket de ubicación: ${wsErr?.message}`);
+    }
+
     // Procesamiento en segundo plano para no demorar la respuesta de la petición API
     this.processGeofencing(viajeId, Number(data.latitud), Number(data.longitud)).catch(err => {
       this.logger.error(`Error al procesar geofencing del viaje ${viajeId}: ${err.message}`);
     });
 
-    return result.rows[0];
+    return savedRow;
   }
 
   private async processGeofencing(viajeId: number, currentLat: number, currentLng: number) {

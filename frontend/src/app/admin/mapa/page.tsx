@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
+import { io, Socket } from 'socket.io-client';
 import { fetchLatestLocations, fetchViajes, fetchReservas, fetchAlertas } from '@/lib/api';
 import {
   MapPin, User, Clock, Navigation, Bus, Route, Maximize2, Minimize2,
@@ -378,6 +379,21 @@ export default function FleetMapPage() {
       }
     };
 
+    const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://2.24.81.205:4000';
+    const socket: Socket = io(`${backendUrl}/locations`, {
+      transports: ['websocket', 'polling'],
+      autoConnect: true,
+    });
+
+    socket.on('connect', () => {
+      console.log('[WebSocket] Conectado a canal de rastreo GPS en vivo:', socket.id);
+    });
+
+    socket.on('location_update', (data: any) => {
+      console.log('[WebSocket] Recibida actualización instantánea GPS:', data);
+      poll();
+    });
+
     m.on('load', () => {
       poll();
       const interval = setInterval(poll, REFRESH_INTERVAL_MS);
@@ -385,6 +401,7 @@ export default function FleetMapPage() {
     });
 
     return () => {
+      socket.disconnect();
       clearInterval((m as any)._pollInterval);
       stopMarkers.current.forEach(mk => mk.remove());
       m.remove();

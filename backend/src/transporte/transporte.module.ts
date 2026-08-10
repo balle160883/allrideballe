@@ -3,11 +3,12 @@ import { DatabaseModule } from '../database/database.module';
 import { RentaModule } from '../renta/renta.module';
 import { TransporteController } from './transporte.controller';
 import { TransporteService } from './transporte.service';
+import { TransporteGateway } from './transporte.gateway';
 
 @Module({
   imports: [DatabaseModule, RentaModule],
   controllers: [TransporteController],
-  providers: [TransporteService],
-  exports: [TransporteService],
+  providers: [TransporteService, TransporteGateway],
+  exports: [TransporteService, TransporteGateway],
 })
 export class TransporteModule {}
