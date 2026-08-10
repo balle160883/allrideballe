@@ -15,6 +15,17 @@ export function useLocationTracking() {
       if (user) {
         if (user.rol === 'conductor') {
           try {
+            // Transmitir posición inicial inmediatamente al iniciar sesión
+            Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced })
+              .then(loc => {
+                api.post('/transporte/locations', {
+                  latitud: loc.coords.latitude,
+                  longitud: loc.coords.longitude,
+                  velocidad: loc.coords.speed ? Math.max(0, loc.coords.speed * 3.6) : 0,
+                }).catch(err => console.log('[useLocationTracking] Login GPS transmit error:', err?.message));
+              })
+              .catch(err => console.log('[useLocationTracking] Login GPS error:', err?.message));
+
             // Check if there is already an active viaje
             const activeViajeId = await SecureStore.getItemAsync('active_viaje_id');
             if (!activeViajeId) {

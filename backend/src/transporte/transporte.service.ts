@@ -570,15 +570,40 @@ export class TransporteService {
   // ==========================================
   // GPS / UBICACIONES DE FLOTA
   // ==========================================
-  async saveLocation(data: { viaje_id: number; latitud: number; longitud: number; velocidad?: number }) {
+  async saveLocation(data: { viaje_id?: number; latitud: number; longitud: number; velocidad?: number }, userId?: string) {
+    let viajeId = data.viaje_id;
+    
+    if ((!viajeId || isNaN(viajeId)) && userId) {
+      const activeTripRes = await this.databaseService.query(
+        `SELECT id FROM "viajes" WHERE conductor_id = $1 AND estado IN ('en_ruta', 'programado', 'iniciado', 'en_curso', 'activo') ORDER BY id DESC LIMIT 1`,
+        [userId]
+      );
+      if (activeTripRes.rows.length > 0) {
+        viajeId = activeTripRes.rows[0].id;
+      }
+    }
+
+    if (!viajeId || isNaN(viajeId)) {
+      const defaultTripRes = await this.databaseService.query(
+        `SELECT id FROM "viajes" WHERE estado IN ('en_ruta', 'programado') ORDER BY id ASC LIMIT 1`
+      );
+      if (defaultTripRes.rows.length > 0) {
+        viajeId = defaultTripRes.rows[0].id;
+      }
+    }
+
+    if (!viajeId || isNaN(viajeId)) {
+      return { success: false, message: 'No active trip assigned to record location' };
+    }
+
     const result = await this.databaseService.query(
       'INSERT INTO "ubicaciones_flota" ("viaje_id", "latitud", "longitud", "velocidad") VALUES ($1, $2, $3, $4) RETURNING *',
-      [data.viaje_id, data.latitud, data.longitud, data.velocidad || 0]
+      [viajeId, data.latitud, data.longitud, data.velocidad || 0]
     );
 
     // Procesamiento en segundo plano para no demorar la respuesta de la petición API
-    this.processGeofencing(data.viaje_id, Number(data.latitud), Number(data.longitud)).catch(err => {
-      this.logger.error(`Error al procesar geofencing del viaje ${data.viaje_id}: ${err.message}`);
+    this.processGeofencing(viajeId, Number(data.latitud), Number(data.longitud)).catch(err => {
+      this.logger.error(`Error al procesar geofencing del viaje ${viajeId}: ${err.message}`);
     });
 
     return result.rows[0];

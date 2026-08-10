@@ -343,6 +343,18 @@ export default function MapaScreen({ route: routeProp, navigation }: any) {
         (loc) => {
           const coords = [loc.coords.longitude, loc.coords.latitude];
           setUserLocation(coords);
+
+          // Transmitir posición GPS en tiempo real si el usuario es conductor
+          if (user && user.rol === 'conductor') {
+            const activeVId = selectedViaje?.id || (viajesActivos && viajesActivos.length > 0 ? viajesActivos[0].id : undefined);
+            api.post('/transporte/locations', {
+              viaje_id: activeVId,
+              latitud: loc.coords.latitude,
+              longitud: loc.coords.longitude,
+              velocidad: loc.coords.speed ? Math.max(0, loc.coords.speed * 3.6) : 0,
+            }).catch(err => console.log('[MapaScreen] Live GPS transmit error:', err?.message));
+          }
+
           if (navigationMode && route && route.coordinates && route.coordinates.length >= 2) {
             const { snappedPoint, bearing } = getSnappedInfo(coords, route.coordinates);
             setSnappedLocation(snappedPoint);

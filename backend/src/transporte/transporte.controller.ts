@@ -210,22 +210,24 @@ export class TransporteController {
   // ==========================================
   @Post('locations')
   async saveLocation(@Request() req: any, @Body() data: any) {
+    const viajeId = data.viaje_id && !isNaN(Number(data.viaje_id)) ? Number(data.viaje_id) : undefined;
     return this.transporteService.saveLocation({
-      viaje_id: Number(data.viaje_id),
+      viaje_id: viajeId,
       latitud: Number(data.latitud),
       longitud: Number(data.longitud),
       velocidad: data.velocidad ? Number(data.velocidad) : undefined,
-    });
+    }, req?.user?.userId);
   }
 
   @Post('viajes/location')
   async saveLocationAlias(@Request() req: any, @Body() data: any) {
+    const viajeId = data.viaje_id && !isNaN(Number(data.viaje_id)) ? Number(data.viaje_id) : undefined;
     return this.transporteService.saveLocation({
-      viaje_id: Number(data.viaje_id),
+      viaje_id: viajeId,
       latitud: Number(data.latitud),
       longitud: Number(data.longitud),
       velocidad: data.velocidad ? Number(data.velocidad) : undefined,
-    });
+    }, req?.user?.userId);
   }
 
   @Get('locations/latest')
