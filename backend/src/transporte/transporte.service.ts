@@ -574,7 +574,7 @@ export class TransporteService {
   // ==========================================
   // GPS / UBICACIONES DE FLOTA
   // ==========================================
-  async saveLocation(data: { viaje_id?: number; latitud: number; longitud: number; velocidad?: number }, userId?: string) {
+  async saveLocation(data: { viaje_id?: number; latitud: number; longitud: number; velocidad?: number; timestamp?: string }, userId?: string) {
     let viajeId = data.viaje_id;
     
     if ((!viajeId || isNaN(viajeId)) && userId) {
@@ -600,10 +600,14 @@ export class TransporteService {
       return { success: false, message: 'No active trip assigned to record location' };
     }
 
-    const result = await this.databaseService.query(
-      'INSERT INTO "ubicaciones_flota" ("viaje_id", "latitud", "longitud", "velocidad") VALUES ($1, $2, $3, $4) RETURNING *',
-      [viajeId, data.latitud, data.longitud, data.velocidad || 0]
-    );
+    const insertQuery = data.timestamp 
+      ? 'INSERT INTO "ubicaciones_flota" ("viaje_id", "latitud", "longitud", "velocidad", "timestamp") VALUES ($1, $2, $3, $4, $5) RETURNING *'
+      : 'INSERT INTO "ubicaciones_flota" ("viaje_id", "latitud", "longitud", "velocidad") VALUES ($1, $2, $3, $4) RETURNING *';
+    const insertParams = data.timestamp
+      ? [viajeId, data.latitud, data.longitud, data.velocidad || 0, data.timestamp]
+      : [viajeId, data.latitud, data.longitud, data.velocidad || 0];
+
+    const result = await this.databaseService.query(insertQuery, insertParams);
 
     const savedRow = result.rows[0];
 
@@ -626,6 +630,91 @@ export class TransporteService {
     });
 
     return savedRow;
+  }
+
+  async saveLocationsBatch(
+    locations: Array<{ viaje_id?: number; latitud: number; longitud: number; velocidad?: number; timestamp?: string }>,
+    userId?: string
+  ) {
+    if (!Array.isArray(locations) || locations.length === 0) {
+      return { success: false, count: 0, message: 'No hay ubicaciones para procesar' };
+    }
+
+    this.logger.log(`[Telemetría Batch] Procesando lote de ${locations.length} ubicaciones offline del usuario ${userId || 'anónimo'}`);
+
+    let processedCount = 0;
+    let lastRow: any = null;
+    let lastViajeId: number | undefined = undefined;
+
+    // Resolver viaje activo por defecto si algún item viene sin viaje_id
+    let defaultViajeId: number | undefined;
+    if (userId) {
+      const activeTripRes = await this.databaseService.query(
+        `SELECT id FROM "viajes" WHERE conductor_id = $1 AND estado IN ('en_ruta', 'programado', 'iniciado', 'en_curso', 'activo') ORDER BY id DESC LIMIT 1`,
+        [userId]
+      );
+      if (activeTripRes.rows.length > 0) {
+        defaultViajeId = activeTripRes.rows[0].id;
+      }
+    }
+    if (!defaultViajeId) {
+      const genericTrip = await this.databaseService.query(
+        `SELECT id FROM "viajes" WHERE estado IN ('en_ruta', 'programado') ORDER BY id ASC LIMIT 1`
+      );
+      if (genericTrip.rows.length > 0) {
+        defaultViajeId = genericTrip.rows[0].id;
+      }
+    }
+
+    // Insertar cada ubicación preservando su timestamp original
+    for (const loc of locations) {
+      const viajeId = loc.viaje_id || defaultViajeId;
+      if (!viajeId || isNaN(viajeId)) continue;
+
+      const query = loc.timestamp
+        ? 'INSERT INTO "ubicaciones_flota" ("viaje_id", "latitud", "longitud", "velocidad", "timestamp") VALUES ($1, $2, $3, $4, $5) RETURNING *'
+        : 'INSERT INTO "ubicaciones_flota" ("viaje_id", "latitud", "longitud", "velocidad") VALUES ($1, $2, $3, $4) RETURNING *';
+      const params = loc.timestamp
+        ? [viajeId, loc.latitud, loc.longitud, loc.velocidad || 0, loc.timestamp]
+        : [viajeId, loc.latitud, loc.longitud, loc.velocidad || 0];
+
+      try {
+        const res = await this.databaseService.query(query, params);
+        if (res.rows.length > 0) {
+          lastRow = res.rows[0];
+          lastViajeId = viajeId;
+          processedCount++;
+        }
+      } catch (err: any) {
+        this.logger.error(`Error al insertar ubicación en lote: ${err.message}`);
+      }
+    }
+
+    // Para el último punto sincronizado, emitir WebSocket a la torre de control y geofencing
+    if (lastRow && lastViajeId) {
+      try {
+        this.transporteGateway.broadcastLocationUpdate({
+          viaje_id: lastViajeId,
+          latitud: Number(lastRow.latitud),
+          longitud: Number(lastRow.longitud),
+          velocidad: Number(lastRow.velocidad || 0),
+          timestamp: lastRow.timestamp || new Date().toISOString()
+        });
+      } catch (wsErr: any) {
+        this.logger.error(`Error al emitir WebSocket tras sincronización batch: ${wsErr?.message}`);
+      }
+
+      this.processGeofencing(lastViajeId, Number(lastRow.latitud), Number(lastRow.longitud)).catch(err => {
+        this.logger.error(`Error al procesar geofencing batch del viaje ${lastViajeId}: ${err.message}`);
+      });
+    }
+
+    return {
+      success: true,
+      processed: processedCount,
+      total: locations.length,
+      lastLocation: lastRow
+    };
   }
 
   private async processGeofencing(viajeId: number, currentLat: number, currentLng: number) {
@@ -819,11 +908,52 @@ export class TransporteService {
 
   async createAlerta(data: { viaje_id?: number | null; tipo: string; descripcion: string; latitud?: number; longitud?: number; prioridad?: string }) {
     const prioridad = data.prioridad || ((data.tipo === 'sos' || data.tipo === 'acoso') ? 'alta' : 'media');
+
+    // Enriquecer datos de viaje, conductor y vehículo si hay viaje_id asociado
+    let rutaNombre = '';
+    let conductorNombre = '';
+    let patente = '';
+    if (data.viaje_id) {
+      try {
+        const vRes = await this.databaseService.query(
+          `SELECT r.nombre as ruta_nombre, u.nombre as conductor_nombre, vh.patente
+           FROM viajes v
+           LEFT JOIN rutas r ON v.ruta_id = r.id
+           LEFT JOIN usuarios u ON v.conductor_id = u.id
+           LEFT JOIN vehiculos vh ON v.vehiculo_id = vh.id
+           WHERE v.id = $1`,
+          [data.viaje_id]
+        );
+        if (vRes.rows.length > 0) {
+          rutaNombre = vRes.rows[0].ruta_nombre || '';
+          conductorNombre = vRes.rows[0].conductor_nombre || '';
+          patente = vRes.rows[0].patente || '';
+        }
+      } catch (err: any) {
+        this.logger.warn(`No se pudo enriquecer viaje ${data.viaje_id} en alerta: ${err?.message}`);
+      }
+    }
+
     const result = await this.databaseService.query(
       'INSERT INTO "alertas_viaje" ("viaje_id", "tipo", "descripcion", "latitud", "longitud", "prioridad") VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
       [data.viaje_id || null, data.tipo, data.descripcion, data.latitud || null, data.longitud || null, prioridad]
     );
-    return result.rows[0];
+
+    const savedAlerta = {
+      ...result.rows[0],
+      ruta_nombre: rutaNombre,
+      conductor_nombre: conductorNombre,
+      patente: patente,
+    };
+
+    // Difundir inmediatamente por WebSockets a las torres de control del frontend
+    try {
+      this.transporteGateway.broadcastAlert(savedAlerta);
+    } catch (wsErr: any) {
+      this.logger.error(`Error al emitir alerta por WebSocket: ${wsErr?.message}`);
+    }
+
+    return savedAlerta;
   }
 
   async resolverAlerta(id: number) {
@@ -834,11 +964,91 @@ export class TransporteService {
     return result.rows[0];
   }
 
-  async abordarPasajero(viajeId: number, identificadorTarjeta: string) {
-    // 1. Buscar pasajero por su identificador de tarjeta (QR o RFID)
+  async abordarPasajero(viajeId: number, rawInput: string) {
+    if (!rawInput || typeof rawInput !== 'string' || !rawInput.trim()) {
+      throw new BadRequestException('El código QR o identificador proporcionado es inválido.');
+    }
+
+    const cleanInput = rawInput.trim();
+    let targetCardId = cleanInput;
+    let targetReservaId: number | null = null;
+    let targetEmail: string | null = null;
+
+    // 1. Intentar parsear si viene formateado como JSON desde un QR digital
+    try {
+      if (cleanInput.startsWith('{') && cleanInput.endsWith('}')) {
+        const parsed = JSON.parse(cleanInput);
+        if (parsed.reserva_id) targetReservaId = Number(parsed.reserva_id);
+        if (parsed.identificador_tarjeta) targetCardId = String(parsed.identificador_tarjeta);
+        if (parsed.email) targetEmail = String(parsed.email).toLowerCase();
+        if (parsed.tarjeta) targetCardId = String(parsed.tarjeta);
+      }
+    } catch {
+      // Continuar con string plano
+    }
+
+    // 2. Comprobar si el string contiene formato RES-123 o un ID numérico directo
+    if (!targetReservaId) {
+      if (/^res-\d+$/i.test(cleanInput)) {
+        targetReservaId = Number(cleanInput.replace(/[^0-9]/g, ''));
+      } else if (/^\d+$/.test(cleanInput) && cleanInput.length < 9) {
+        const resCheck = await this.databaseService.query(
+          'SELECT id FROM "reservas" WHERE "id" = $1 AND "viaje_id" = $2',
+          [Number(cleanInput), viajeId]
+        );
+        if (resCheck.rows.length > 0) {
+          targetReservaId = Number(cleanInput);
+        }
+      }
+    }
+
+    // 3. Si identificamos directamente la reserva por ID
+    if (targetReservaId) {
+      const resResult = await this.databaseService.query(
+        `SELECT r.*, u.nombre as pasajero_nombre, u.email as pasajero_email, u.identificador_tarjeta
+         FROM "reservas" r
+         JOIN "usuarios" u ON r.pasajero_id = u.id
+         WHERE r.id = $1 AND r.viaje_id = $2`,
+        [targetReservaId, viajeId]
+      );
+
+      if (resResult.rows.length > 0) {
+        const reserva = resResult.rows[0];
+        if (reserva.estado === 'cancelado') {
+          throw new BadRequestException(`La reservación de ${reserva.pasajero_nombre} está cancelada.`);
+        }
+        if (reserva.estado === 'rechazado') {
+          throw new BadRequestException(`La reservación de ${reserva.pasajero_nombre} fue rechazada.`);
+        }
+        if (reserva.estado === 'pendiente_aprobacion') {
+          throw new BadRequestException(`La reservación de ${reserva.pasajero_nombre} aún no está aprobada.`);
+        }
+
+        if (reserva.estado !== 'confirmado' && reserva.estado !== 'abordado') {
+          await this.databaseService.query(
+            'UPDATE "reservas" SET "estado" = \'confirmado\' WHERE "id" = $1',
+            [reserva.id]
+          );
+        }
+
+        return {
+          success: true,
+          mensaje: reserva.estado === 'confirmado' ? 'El pasajero ya había abordado previamente' : 'Abordaje registrado con éxito',
+          reserva: {
+            ...reserva,
+            estado: 'confirmado'
+          }
+        };
+      }
+    }
+
+    // 4. Buscar pasajero por tarjeta, email o identificador
     const userResult = await this.databaseService.query(
-      'SELECT id, nombre, email, rol, "identificador_tarjeta" FROM "usuarios" WHERE "identificador_tarjeta" = $1 AND "rol" = \'pasajero\'',
-      [identificadorTarjeta]
+      `SELECT id, nombre, email, rol, "identificador_tarjeta" 
+       FROM "usuarios" 
+       WHERE ("identificador_tarjeta" = $1 OR "email" = $2 OR "identificador_tarjeta" = $3) 
+         AND "rol" = 'pasajero' LIMIT 1`,
+      [targetCardId, targetEmail || cleanInput.toLowerCase(), cleanInput]
     );
 
     if (userResult.rows.length === 0) {
@@ -847,7 +1057,7 @@ export class TransporteService {
 
     const passenger = userResult.rows[0];
 
-    // 2. Buscar la reservación para este pasajero en este viaje específico
+    // 5. Buscar la reservación para este pasajero en este viaje específico
     const reservaResult = await this.databaseService.query(
       'SELECT * FROM "reservas" WHERE "viaje_id" = $1 AND "pasajero_id" = $2',
       [viajeId, passenger.id]
@@ -860,42 +1070,31 @@ export class TransporteService {
     const reserva = reservaResult.rows[0];
 
     if (reserva.estado === 'pendiente_aprobacion') {
-      throw new BadRequestException(`La solicitud de reservación de ${passenger.nombre} aún está pendiente de aprobación por su gerente.`);
+      throw new BadRequestException(`La solicitud de reservación de ${passenger.nombre} aún está pendiente de aprobación.`);
     }
 
     if (reserva.estado === 'rechazado') {
       throw new BadRequestException(`La solicitud de reservación de ${passenger.nombre} fue rechazada.`);
     }
 
-    if (reserva.estado === 'confirmado' || reserva.estado === 'abordado') {
-      return {
-        success: true,
-        reserva: {
-          ...reserva,
-          pasajero_nombre: passenger.nombre,
-          pasajero_email: passenger.email,
-          identificador_tarjeta: passenger.identificador_tarjeta,
-        },
-      };
-    }
-
     if (reserva.estado === 'cancelado') {
       throw new BadRequestException(`La reservación de ${passenger.nombre} para este viaje está cancelada.`);
     }
 
-    // 3. Registrar el abordaje marcando la reserva como 'confirmado' (abordado)
-    // El frontend Next.js y la app de Expo usan 'confirmado' para marcar el abordaje exitoso
-    const updateResult = await this.databaseService.query(
-      'UPDATE "reservas" SET "estado" = \'confirmado\' WHERE "id" = $1 RETURNING *',
-      [reserva.id]
-    );
-
-    const updatedReserva = updateResult.rows[0];
+    // Registrar abordaje como confirmado
+    if (reserva.estado !== 'confirmado' && reserva.estado !== 'abordado') {
+      await this.databaseService.query(
+        'UPDATE "reservas" SET "estado" = \'confirmado\' WHERE "id" = $1',
+        [reserva.id]
+      );
+    }
 
     return {
       success: true,
+      mensaje: reserva.estado === 'confirmado' ? 'El pasajero ya había abordado previamente' : 'Abordaje registrado con éxito',
       reserva: {
-        ...updatedReserva,
+        ...reserva,
+        estado: 'confirmado',
         pasajero_nombre: passenger.nombre,
         pasajero_email: passenger.email,
         identificador_tarjeta: passenger.identificador_tarjeta,

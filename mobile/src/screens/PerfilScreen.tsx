@@ -5,6 +5,9 @@ import { Colors, Spacing } from '../constants/theme';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { AppConfig } from '../constants/config';
 import { HapticFeedback } from '../utils/Haptics';
+import * as Location from 'expo-location';
+import { api } from '../api/backend';
+import { OfflineService } from '../utils/OfflineService';
 
 export default function PerfilScreen() {
   const { user, signOut, proximityAlertsEnabled, setProximityAlertsEnabled } = useAuth();
@@ -14,19 +17,51 @@ export default function PerfilScreen() {
   const handleSOS = () => {
     HapticFeedback.heavy();
     Alert.alert(
-      '🚨 EMERGENCIA',
-      '¿Deseas enviar una alerta de emergencia? Esto notificará inmediatamente al departamento de seguridad.',
+      '🚨 EMERGENCIA SOS',
+      '¿Deseas enviar una alerta de emergencia? Esto notificará inmediatamente a la torre de control con tu ubicación satelital.',
       [
         { text: 'Cancelar', style: 'cancel' },
         { 
-          text: 'Enviar Alerta', 
+          text: 'Enviar Alerta Inmediata', 
           style: 'destructive',
-          onPress: () => {
+          onPress: async () => {
             HapticFeedback.error();
-            Alert.alert(
-              '✅ Alerta Enviada',
-              'Tu alerta de emergencia ha sido registrada. El equipo de seguridad se pondrá en contacto contigo.'
-            );
+            let lat: number = 20.6736;
+            let lng: number = -103.3496;
+            try {
+              const { status } = await Location.requestForegroundPermissionsAsync();
+              if (status === 'granted') {
+                const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+                lat = loc.coords.latitude;
+                lng = loc.coords.longitude;
+              }
+            } catch (locErr) {
+              console.log('Error obteniendo ubicación para SOS:', locErr);
+            }
+
+            const alertPayload = {
+              viaje_id: null,
+              tipo: 'sos',
+              descripcion: `🔴 BOTÓN DE PÁNICO activado desde Perfil por ${user?.gestor || user?.email || 'Usuario'}.`,
+              latitud: lat,
+              longitud: lng,
+              prioridad: 'alta',
+            };
+
+            try {
+              await api.post('/transporte/alertas', alertPayload);
+              Alert.alert(
+                '🚨 Alerta SOS Enviada',
+                'La central de seguridad ha recibido tu alerta con tus coordenadas GPS en tiempo real. Mantén la calma.'
+              );
+            } catch (apiErr: any) {
+              console.log('Error enviando SOS online, guardando offline:', apiErr?.message);
+              await OfflineService.saveAlertaOffline(alertPayload);
+              Alert.alert(
+                'Alerta Guardada (Modo Offline)',
+                'No hay cobertura en este momento, pero tu alerta SOS fue guardada localmente y se transmitirá automáticamente al recuperar señal.'
+              );
+            }
           }
         },
       ]

@@ -216,7 +216,14 @@ export class TransporteController {
       latitud: Number(data.latitud),
       longitud: Number(data.longitud),
       velocidad: data.velocidad ? Number(data.velocidad) : undefined,
+      timestamp: data.timestamp ? String(data.timestamp) : undefined,
     }, req?.user?.userId);
+  }
+
+  @Post('locations/batch')
+  async saveLocationsBatch(@Request() req: any, @Body() data: any) {
+    const locations = Array.isArray(data) ? data : (data.locations || []);
+    return this.transporteService.saveLocationsBatch(locations, req?.user?.userId);
   }
 
   @Post('viajes/location')
@@ -227,6 +234,7 @@ export class TransporteController {
       latitud: Number(data.latitud),
       longitud: Number(data.longitud),
       velocidad: data.velocidad ? Number(data.velocidad) : undefined,
+      timestamp: data.timestamp ? String(data.timestamp) : undefined,
     }, req?.user?.userId);
   }
 

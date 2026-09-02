@@ -4,7 +4,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import { io, Socket } from 'socket.io-client';
-import { fetchLatestLocations, fetchViajes, fetchReservas, fetchAlertas } from '@/lib/api';
+import { fetchLatestLocations, fetchViajes, fetchReservas, fetchAlertas, resolverAlerta } from '@/lib/api';
 import {
   MapPin, User, Clock, Navigation, Bus, Route, Maximize2, Minimize2,
   Layers, ChevronLeft, AlertTriangle, Wifi, Users, Gauge, Timer,
@@ -53,6 +53,45 @@ function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): nu
       Math.cos((lat2 * Math.PI) / 180) *
       Math.sin(dLon / 2) ** 2;
   return 2 * R * Math.asin(Math.sqrt(a));
+}
+
+/** Función para reproducir tono de alarma de emergencia con Web Audio API */
+function playEmergencySound() {
+  try {
+    if (typeof window === 'undefined') return;
+    const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioContextClass) return;
+    const ctx = new AudioContextClass();
+    const now = ctx.currentTime;
+
+    // Tono agudo de urgencia
+    const osc1 = ctx.createOscillator();
+    const gain1 = ctx.createGain();
+    osc1.type = 'sawtooth';
+    osc1.frequency.setValueAtTime(880, now);
+    osc1.frequency.exponentialRampToValueAtTime(440, now + 0.25);
+    gain1.gain.setValueAtTime(0.3, now);
+    gain1.gain.linearRampToValueAtTime(0.01, now + 0.25);
+    osc1.connect(gain1);
+    gain1.connect(ctx.destination);
+    osc1.start(now);
+    osc1.stop(now + 0.25);
+
+    // Segundo tono en armonía
+    const osc2 = ctx.createOscillator();
+    const gain2 = ctx.createGain();
+    osc2.type = 'sawtooth';
+    osc2.frequency.setValueAtTime(1046.5, now + 0.3);
+    osc2.frequency.exponentialRampToValueAtTime(523.25, now + 0.55);
+    gain2.gain.setValueAtTime(0.3, now + 0.3);
+    gain2.gain.linearRampToValueAtTime(0.01, now + 0.55);
+    osc2.connect(gain2);
+    gain2.connect(ctx.destination);
+    osc2.start(now + 0.3);
+    osc2.stop(now + 0.55);
+  } catch (err) {
+    console.warn('AudioContext alert error:', err);
+  }
 }
 
 /** Color del marcador según velocidad */
@@ -140,6 +179,7 @@ export default function FleetMapPage() {
   const [filterMode,      setFilterMode]      = useState<'todos' | 'moving' | 'alert'>('todos');
   const [countdown,       setCountdown]       = useState(REFRESH_INTERVAL_MS / 1000);
   const [lastUpdate,      setLastUpdate]      = useState<Date | null>(null);
+  const [liveEmergencyModal, setLiveEmergencyModal] = useState<any | null>(null);
 
   const viajesRef    = useRef<any[]>([]);
   const locationsRef = useRef<VehicleLocation[]>([]);
@@ -394,6 +434,14 @@ export default function FleetMapPage() {
       poll();
     });
 
+    socket.on('alerta_emergencia', (alerta: any) => {
+      console.log('[WebSocket] 🚨 ALERTA SOS RECIBIDA EN VIVO EN TORRE DE CONTROL:', alerta);
+      playEmergencySound();
+      setLiveEmergencyModal(alerta);
+      setAlertas(prev => [alerta, ...prev.filter(a => a.id !== alerta.id)]);
+      poll();
+    });
+
     m.on('load', () => {
       poll();
       const interval = setInterval(poll, REFRESH_INTERVAL_MS);
@@ -453,6 +501,96 @@ export default function FleetMapPage() {
 
   return (
     <div className={`flex flex-col gap-0 ${isFullscreen ? 'fixed inset-0 z-50 bg-slate-950 p-0' : 'space-y-4'}`}>
+
+      {/* ── Modal Flotante de Emergencia Crítica en Tiempo Real (SOS / Alertas) ── */}
+      {liveEmergencyModal && (
+        <div className="fixed top-6 right-6 z-[9999] max-w-md w-full bg-red-600 text-white rounded-3xl shadow-2xl border-2 border-red-400 p-5">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-2xl bg-white/20 flex items-center justify-center animate-pulse">
+                <ShieldAlert size={28} className="text-white" />
+              </div>
+              <div>
+                <span className="bg-red-800 text-white text-[10px] font-black uppercase px-2 py-0.5 rounded-md tracking-wider">
+                  {liveEmergencyModal.tipo === 'sos' ? 'EMERGENCIA SOS' : 'INCIDENCIA EN RUTA'}
+                </span>
+                <h3 className="font-black text-lg leading-tight mt-1">¡Alerta Recibida en Vivo!</h3>
+              </div>
+            </div>
+            <button
+              onClick={() => setLiveEmergencyModal(null)}
+              className="text-white/70 hover:text-white p-1 rounded-lg hover:bg-white/10"
+            >
+              ✕
+            </button>
+          </div>
+
+          <p className="text-sm text-red-100 font-medium mt-3 bg-red-700/50 p-3 rounded-xl border border-red-500/50">
+            {liveEmergencyModal.descripcion}
+          </p>
+
+          <div className="grid grid-cols-2 gap-2 mt-3 text-xs">
+            <div className="bg-white/10 rounded-xl p-2.5">
+              <span className="text-red-200 text-[10px] uppercase font-bold block">Ruta / Viaje</span>
+              <span className="font-extrabold truncate block">{liveEmergencyModal.ruta_nombre || `Viaje #${liveEmergencyModal.viaje_id || 'N/A'}`}</span>
+            </div>
+            <div className="bg-white/10 rounded-xl p-2.5">
+              <span className="text-red-200 text-[10px] uppercase font-bold block">Conductor / Unidad</span>
+              <span className="font-extrabold truncate block">{liveEmergencyModal.conductor_nombre || liveEmergencyModal.patente || 'No asignado'}</span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 mt-4">
+            <button
+              onClick={() => {
+                if (map.current) {
+                  let targetLng = liveEmergencyModal.longitud;
+                  let targetLat = liveEmergencyModal.latitud;
+                  if (!targetLng || !targetLat) {
+                    const loc = locations.find(l => l.viaje_id === liveEmergencyModal.viaje_id);
+                    if (loc) {
+                      targetLng = loc.longitud;
+                      targetLat = loc.latitud;
+                    }
+                  }
+                  if (targetLng && targetLat) {
+                    map.current.flyTo({
+                      center: [Number(targetLng), Number(targetLat)],
+                      zoom: 16,
+                      speed: 1.6,
+                      curve: 1.4,
+                      essential: true
+                    });
+                  }
+                  if (liveEmergencyModal.viaje_id) {
+                    setSelectedViajeId(liveEmergencyModal.viaje_id);
+                  }
+                }
+              }}
+              className="flex-1 bg-white text-red-700 hover:bg-red-50 py-2.5 rounded-xl font-black text-xs uppercase tracking-wider transition-colors shadow flex items-center justify-center gap-1.5 cursor-pointer"
+            >
+              <Navigation size={14} />
+              Localizar en Mapa
+            </button>
+            <button
+              onClick={async () => {
+                if (liveEmergencyModal.id) {
+                  try {
+                    await resolverAlerta(liveEmergencyModal.id);
+                    setAlertas(prev => prev.map(a => a.id === liveEmergencyModal.id ? { ...a, resuelta: true } : a));
+                  } catch (e) {
+                    console.error('Error resolviendo alerta:', e);
+                  }
+                }
+                setLiveEmergencyModal(null);
+              }}
+              className="bg-red-800/80 hover:bg-red-900 text-white px-4 py-2.5 rounded-xl font-extrabold text-xs uppercase tracking-wider transition-colors cursor-pointer"
+            >
+              Atender
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ── Banner Flotante de SOS e Incidentes en Vivo ─────────────────────── */}
       {alertasActivas.length > 0 && !isFullscreen && (

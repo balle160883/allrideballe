@@ -1,8 +1,5 @@
-import { Inter } from "next/font/google";
 import "./globals.css";
 import { ClientLayout } from "@/components/ClientLayout";
-
-const inter = Inter({ subsets: ["latin"] });
 
 export const metadata = {
   title: "Pro Mobile",
@@ -16,7 +13,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="es">
-      <body className={inter.className}>
+      <body className="antialiased font-sans">
         <ClientLayout>
           {children}
         </ClientLayout>

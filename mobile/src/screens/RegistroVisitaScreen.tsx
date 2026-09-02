@@ -26,9 +26,13 @@ export default function RegistroVisitaScreen({ route, navigation }: any) {
   const [reportType, setReportType] = useState('retraso');
   const [reportDesc, setReportDesc] = useState('');
   
-  // Lógica de cámara y escaneo
+  // Lógica de cámara y escaneo profesional
   const [permission, requestPermission] = useCameraPermissions();
   const [isScanning, setIsScanning] = useState(false);
+  const [isTorchOn, setIsTorchOn] = useState(false);
+  const [facing, setFacing] = useState<'back' | 'front'>('back');
+  const [lastBoardedPassenger, setLastBoardedPassenger] = useState<any | null>(null);
+  const [scanCooldown, setScanCooldown] = useState(false);
 
   const viajeId = visita.viaje_id || visita.id;
 
@@ -62,7 +66,6 @@ export default function RegistroVisitaScreen({ route, navigation }: any) {
           });
           successCount++;
         } catch (e: any) {
-          // Si el backend indica que ya está abordado (o es idempotente), lo removemos
           if (e.message && (e.message.includes('ya abordó') || e.message.includes('previamente') || e.message.includes('confirmado'))) {
             successCount++;
           } else {
@@ -89,6 +92,7 @@ export default function RegistroVisitaScreen({ route, navigation }: any) {
     if (!scannedCardId.trim()) return;
 
     setLoading(true);
+    setScanCooldown(true);
     try {
       const state = await NetInfo.fetch();
       
@@ -114,13 +118,15 @@ export default function RegistroVisitaScreen({ route, navigation }: any) {
         HapticFeedback.success();
         Speech.speak('Boleto validado en modo fuera de línea', { language: 'es' });
 
-        Alert.alert(
-          '🎟️ Abordaje Local Guardado',
-          'Sin conexión a internet. El boleto fue validado y guardado de manera local. Se sincronizará automáticamente al recuperar la señal.'
-        );
+        setLastBoardedPassenger({
+          nombre: `Pasajero (${scannedCardId.trim()})`,
+          asiento: 'Offline',
+          hora: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          offline: true,
+        });
+
         setCardId('');
         if (onScanSuccess) onScanSuccess();
-        navigation.goBack();
         return;
       }
 
@@ -133,19 +139,23 @@ export default function RegistroVisitaScreen({ route, navigation }: any) {
       HapticFeedback.success();
       Speech.speak('Boleto validado con éxito', { language: 'es' });
 
-      Alert.alert(
-        '🎟️ Pasajero Abordado',
-        `Validado con éxito: ${response.reserva.pasajero_nombre || 'Pasajero'} en Asiento #${response.reserva.asiento_numero || 'N/A'}`
-      );
+      setLastBoardedPassenger({
+        nombre: response.reserva?.pasajero_nombre || 'Pasajero Confirmado',
+        asiento: response.reserva?.asiento_numero ? `#${response.reserva.asiento_numero}` : 'General',
+        email: response.reserva?.pasajero_email || '',
+        hora: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        offline: false,
+      });
+
       setCardId('');
       if (onScanSuccess) onScanSuccess();
-      navigation.goBack();
     } catch (e: any) {
       // Confirmación de error háptica y de audio
       HapticFeedback.error();
       Speech.speak('Boleto no válido', { language: 'es' });
 
       Alert.alert('Error de Validación', e.message || 'La tarjeta/código no tiene una reservación activa para este viaje.');
+      setScanCooldown(false);
     } finally {
       setLoading(false);
     }
@@ -177,8 +187,8 @@ export default function RegistroVisitaScreen({ route, navigation }: any) {
   };
 
   const handleBarcodeScanned = ({ data }: { data: string }) => {
+    if (loading || scanCooldown || lastBoardedPassenger) return;
     HapticFeedback.medium();
-    setIsScanning(false);
     if (data) {
       setCardId(data);
       validateCardDirect(data);
@@ -312,46 +322,136 @@ export default function RegistroVisitaScreen({ route, navigation }: any) {
       </View>
     </ScrollView>
 
-    {/* Modal para el lector de cámara QR */}
+    {/* Modal para el lector de cámara QR Profesional */}
     <Modal
       visible={isScanning}
       animationType="slide"
-      onRequestClose={() => setIsScanning(false)}
+      onRequestClose={() => {
+        setIsScanning(false);
+        setLastBoardedPassenger(null);
+        setScanCooldown(false);
+      }}
     >
       <View style={styles.cameraContainer}>
         <CameraView
           style={StyleSheet.absoluteFillObject}
-          facing="back"
+          facing={facing}
+          enableTorch={isTorchOn}
           barcodeScannerSettings={{
             barcodeTypes: ['qr', 'code128', 'ean13', 'upc_a'],
           }}
-          onBarcodeScanned={isScanning ? handleBarcodeScanned : undefined}
+          onBarcodeScanned={isScanning && !lastBoardedPassenger && !loading ? handleBarcodeScanned : undefined}
         />
         
-        {/* Visor / Overlay del Escáner */}
-        <View style={styles.overlayContainer}>
-          <View style={styles.overlayTop} />
-          <View style={styles.overlayMiddleRow}>
-            <View style={styles.overlaySide} />
-            <View style={styles.scannerCutout}>
-              <View style={[styles.corner, styles.topLeft]} />
-              <View style={[styles.corner, styles.topRight]} />
-              <View style={[styles.corner, styles.bottomLeft]} />
-              <View style={[styles.corner, styles.bottomRight]} />
-              <View style={styles.scanLine} />
-            </View>
-            <View style={styles.overlaySide} />
-          </View>
-          <View style={styles.overlayBottom}>
-            <Text style={styles.scanPromptText}>Apunta la cámara al código QR o de barras del boleto</Text>
-            <TouchableOpacity 
-              style={styles.cancelScanButton} 
-              onPress={() => setIsScanning(false)}
-            >
-              <Text style={styles.cancelScanButtonText}>Cancelar</Text>
-            </TouchableOpacity>
-          </View>
+        {/* Barra Superior de Herramientas: Flash, Girar y Salir */}
+        <View style={styles.cameraTopBar}>
+          <TouchableOpacity 
+            style={[styles.cameraToolBtn, isTorchOn && styles.cameraToolBtnActive]} 
+            onPress={() => setIsTorchOn(!isTorchOn)}
+          >
+            <MaterialCommunityIcons 
+              name={isTorchOn ? "flashlight" : "flashlight-off"} 
+              size={22} 
+              color="#fff" 
+            />
+            <Text style={styles.cameraToolText}>{isTorchOn ? "Flash ON" : "Flash"}</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            style={styles.cameraToolBtn} 
+            onPress={() => setFacing(facing === 'back' ? 'front' : 'back')}
+          >
+            <MaterialCommunityIcons name="camera-flip" size={22} color="#fff" />
+            <Text style={styles.cameraToolText}>Girar</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            style={[styles.cameraToolBtn, { backgroundColor: 'rgba(239, 68, 68, 0.4)' }]} 
+            onPress={() => {
+              setIsScanning(false);
+              setLastBoardedPassenger(null);
+              setScanCooldown(false);
+            }}
+          >
+            <MaterialCommunityIcons name="close" size={22} color="#fff" />
+            <Text style={styles.cameraToolText}>Cerrar</Text>
+          </TouchableOpacity>
         </View>
+
+        {/* Visor / Overlay del Escáner */}
+        {!lastBoardedPassenger ? (
+          <View style={styles.overlayContainer}>
+            <View style={styles.overlayTop}>
+              <Text style={styles.scanInstructionText}>Enfoca el código QR o credencial en el recuadro</Text>
+            </View>
+            <View style={styles.overlayMiddleRow}>
+              <View style={styles.overlaySide} />
+              <View style={styles.scannerCutout}>
+                <View style={[styles.corner, styles.topLeft]} />
+                <View style={[styles.corner, styles.topRight]} />
+                <View style={[styles.corner, styles.bottomLeft]} />
+                <View style={[styles.corner, styles.bottomRight]} />
+                <View style={styles.scanLine} />
+              </View>
+              <View style={styles.overlaySide} />
+            </View>
+            <View style={styles.overlayBottom}>
+              <Text style={styles.scanPromptText}>Escaneo continuo activado</Text>
+            </View>
+          </View>
+        ) : (
+          /* Tarjeta de Confirmación de Abordaje Exitoso */
+          <View style={styles.confirmedOverlay}>
+            <View style={styles.confirmedCard}>
+              <View style={styles.confirmedHeader}>
+                <MaterialCommunityIcons name="check-decagram" size={48} color="#10b981" />
+                <View style={{ flex: 1, marginLeft: 12 }}>
+                  <Text style={styles.confirmedTitle}>¡Pasajero Abordado!</Text>
+                  <Text style={styles.confirmedTime}>Hora: {lastBoardedPassenger.hora}</Text>
+                </View>
+                {lastBoardedPassenger.offline && (
+                  <View style={styles.offlineTag}>
+                    <Text style={styles.offlineTagText}>OFFLINE</Text>
+                  </View>
+                )}
+              </View>
+
+              <View style={styles.confirmedDivider} />
+
+              <View style={styles.confirmedBody}>
+                <Text style={styles.confirmedName}>{lastBoardedPassenger.nombre}</Text>
+                <View style={styles.confirmedSeatRow}>
+                  <MaterialCommunityIcons name="seat-passenger" size={24} color={Colors.primary} />
+                  <Text style={styles.confirmedSeat}>Asiento: <Text style={styles.confirmedSeatNumber}>{lastBoardedPassenger.asiento}</Text></Text>
+                </View>
+              </View>
+
+              <View style={styles.confirmedActions}>
+                <TouchableOpacity
+                  style={[styles.confirmedBtn, { backgroundColor: '#10b981' }]}
+                  onPress={() => {
+                    setLastBoardedPassenger(null);
+                    setScanCooldown(false);
+                  }}
+                >
+                  <MaterialCommunityIcons name="qrcode-scan" size={20} color="#fff" />
+                  <Text style={styles.confirmedBtnText}>Siguiente Pasajero</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.confirmedBtn, { backgroundColor: '#475569' }]}
+                  onPress={() => {
+                    setIsScanning(false);
+                    setLastBoardedPassenger(null);
+                    setScanCooldown(false);
+                  }}
+                >
+                  <Text style={styles.confirmedBtnText}>Terminar Escaneo</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        )}
       </View>
     </Modal>
   </>
@@ -582,5 +682,141 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 15,
     fontWeight: 'bold',
+  },
+  cameraTopBar: {
+    position: 'absolute',
+    top: 50,
+    left: 20,
+    right: 20,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    zIndex: 100,
+  },
+  cameraToolBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.55)',
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 20,
+    gap: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.25)',
+  },
+  cameraToolBtnActive: {
+    backgroundColor: '#f59e0b',
+    borderColor: '#f59e0b',
+  },
+  cameraToolText: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  scanInstructionText: {
+    color: '#ffffff',
+    fontSize: 15,
+    fontWeight: '700',
+    textAlign: 'center',
+    paddingHorizontal: 20,
+    marginTop: 30,
+  },
+  confirmedOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+    zIndex: 200,
+  },
+  confirmedCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 24,
+    padding: 24,
+    width: '100%',
+    maxWidth: 380,
+    elevation: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+  },
+  confirmedHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  confirmedTitle: {
+    fontSize: 20,
+    fontWeight: '900',
+    color: '#10b981',
+  },
+  confirmedTime: {
+    fontSize: 13,
+    color: Colors.textMuted,
+    marginTop: 2,
+    fontWeight: '600',
+  },
+  offlineTag: {
+    backgroundColor: '#f59e0b',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  offlineTagText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '900',
+  },
+  confirmedDivider: {
+    height: 1,
+    backgroundColor: Colors.border,
+    marginVertical: 16,
+  },
+  confirmedBody: {
+    gap: 8,
+  },
+  confirmedName: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: Colors.text,
+  },
+  confirmedSeatRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#f0fdf4',
+    padding: 12,
+    borderRadius: 12,
+    marginTop: 4,
+  },
+  confirmedSeat: {
+    fontSize: 15,
+    color: Colors.text,
+    fontWeight: '600',
+  },
+  confirmedSeatNumber: {
+    fontSize: 17,
+    fontWeight: '900',
+    color: Colors.primary,
+  },
+  confirmedActions: {
+    marginTop: 20,
+    gap: 10,
+  },
+  confirmedBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    borderRadius: 14,
+    gap: 8,
+  },
+  confirmedBtnText: {
+    color: '#ffffff',
+    fontSize: 15,
+    fontWeight: '800',
   },
 });

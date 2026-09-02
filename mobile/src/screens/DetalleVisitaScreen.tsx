@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   StyleSheet,
   View,
@@ -8,12 +8,17 @@ import {
   Alert,
   ActivityIndicator,
   Linking,
+  TextInput,
+  Image,
 } from 'react-native';
 import { Colors, Spacing } from '../constants/theme';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../api/backend';
 import * as SecureStore from 'expo-secure-store';
+import { OfflineService } from '../utils/OfflineService';
+import { HapticFeedback } from '../utils/Haptics';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function DetalleViajeScreen({ route, navigation }: any) {
   const { visita: viaje } = route.params;
@@ -25,6 +30,10 @@ export default function DetalleViajeScreen({ route, navigation }: any) {
 
   const viajeId = viaje.viaje_id || viaje.id;
 
+  // Estados de lista rápida y filtros
+  const [searchQuery, setSearchQuery] = useState('');
+  const [manifestFilter, setManifestFilter] = useState<'todos' | 'pendientes' | 'abordados'>('todos');
+
   useEffect(() => {
     fetchManifiesto();
   }, []);
@@ -34,8 +43,19 @@ export default function DetalleViajeScreen({ route, navigation }: any) {
       setLoading(true);
       const data = await api.get(`/transporte/viajes/${viajeId}/reservas`);
       setReservas(data || []);
+      if (Array.isArray(data)) {
+        OfflineService.cacheTripPasajeros(Number(viajeId), data);
+      }
     } catch (e) {
-      console.warn('Error cargando manifiesto:', e);
+      console.warn('Error cargando manifiesto en red, consultando caché local:', e);
+      try {
+        const cached = await AsyncStorage.getItem(`@passengers_viaje_${viajeId}`);
+        if (cached) {
+          setReservas(JSON.parse(cached));
+        }
+      } catch (cacheErr) {
+        console.error('Error leyendo caché:', cacheErr);
+      }
     } finally {
       setLoading(false);
     }
@@ -88,14 +108,16 @@ export default function DetalleViajeScreen({ route, navigation }: any) {
 
   const handleToggleBoarding = async (reservaId: number, currentStatus: string) => {
     const next = currentStatus === 'confirmado' ? 'pendiente' : 'confirmado';
+    HapticFeedback.light();
+    // Actualización optimista inmediata en la UI
+    setReservas(prev => prev.map(r => r.id === reservaId ? { ...r, estado: next } : r));
+
     try {
-      setLoading(true);
       await api.patch(`/transporte/reservas/${reservaId}/estado`, { estado: next });
-      fetchManifiesto();
     } catch (e: any) {
-      Alert.alert('Error', 'No se pudo actualizar el abordaje: ' + e.message);
-    } finally {
-      setLoading(false);
+      console.log('Error de red al actualizar abordaje, guardando offline:', e?.message);
+      // Guardar en cola offline si no hay cobertura 4G
+      await OfflineService.saveQRAbordajeOffline(reservaId, Number(viajeId));
     }
   };
 
@@ -112,11 +134,29 @@ export default function DetalleViajeScreen({ route, navigation }: any) {
     navigation.navigate('Mapa', { viaje: { ...viaje, id: viajeId } });
   };
 
-  // Métricas del manifiesto
+  // Métricas del manifiesto y filtro interactivo
   const totalReservas = reservas.length;
   const abordados = reservas.filter(r => r.estado === 'confirmado').length;
   const capacidad = viaje.capacidad || viaje.saldoTotal || 30;
   const ocupacionPct = capacidad > 0 ? Math.round((abordados / capacidad) * 100) : 0;
+
+  const filteredReservas = useMemo(() => {
+    return reservas.filter(r => {
+      const q = searchQuery.trim().toLowerCase();
+      const matchSearch = !q || 
+        (r.pasajero_nombre && r.pasajero_nombre.toLowerCase().includes(q)) ||
+        (r.asiento_numero && r.asiento_numero.toString().includes(q)) ||
+        (r.identificador_tarjeta && r.identificador_tarjeta.toLowerCase().includes(q));
+
+      const isBoarded = r.estado === 'confirmado';
+      const matchTab = 
+        manifestFilter === 'todos' ? true :
+        manifestFilter === 'pendientes' ? !isBoarded :
+        isBoarded;
+
+      return matchSearch && matchTab;
+    });
+  }, [reservas, searchQuery, manifestFilter]);
 
   const salida = new Date(viaje.fecha_hora_salida || viaje.diasMora);
   const salidaStr = salida.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -209,25 +249,69 @@ export default function DetalleViajeScreen({ route, navigation }: any) {
         </Text>
       </View>
 
-      {/* ── Manifiesto de Pasajeros (Solo Conductor) ── */}
+      {/* ── Manifiesto de Pasajeros / Lista Rápida (Solo Conductor) ── */}
       {isConductor && (
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <MaterialCommunityIcons name="format-list-checks" size={18} color={Colors.primary} />
-            <Text style={styles.sectionTitle}>Manifiesto de Pasajeros</Text>
-            <Text style={styles.sectionSubtitle}>Toca un pasajero para confirmar/revertir abordaje</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <MaterialCommunityIcons name="format-list-checks" size={20} color={Colors.primary} />
+              <Text style={styles.sectionTitle}>Lista Rápida de Abordaje</Text>
+            </View>
+            <TouchableOpacity 
+              style={styles.scanShortcutBtn} 
+              onPress={handleScanQR}
+            >
+              <MaterialCommunityIcons name="qrcode-scan" size={16} color="#fff" />
+              <Text style={styles.scanShortcutBtnText}>Escanear QR</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Buscador de Pasajeros */}
+          <View style={styles.searchBarContainer}>
+            <MaterialCommunityIcons name="magnify" size={20} color={Colors.textMuted} />
+            <TextInput
+              style={styles.searchBarInput}
+              placeholder="Buscar por nombre, asiento o credencial..."
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              placeholderTextColor={Colors.textMuted}
+            />
+            {searchQuery.length > 0 && (
+              <TouchableOpacity onPress={() => setSearchQuery('')}>
+                <MaterialCommunityIcons name="close-circle" size={18} color={Colors.textMuted} />
+              </TouchableOpacity>
+            )}
+          </View>
+
+          {/* Pestañas de Filtrado Rápido */}
+          <View style={styles.filterPillsRow}>
+            {(['todos', 'pendientes', 'abordados'] as const).map(tab => (
+              <TouchableOpacity
+                key={tab}
+                style={[styles.filterPill, manifestFilter === tab && styles.filterPillActive]}
+                onPress={() => setManifestFilter(tab)}
+              >
+                <Text style={[styles.filterPillText, manifestFilter === tab && styles.filterPillTextActive]}>
+                  {tab === 'todos' ? `Todos (${totalReservas})` :
+                   tab === 'pendientes' ? `Pendientes (${totalReservas - abordados})` :
+                   `Abordados (${abordados})`}
+                </Text>
+              </TouchableOpacity>
+            ))}
           </View>
 
           {loading && reservas.length === 0 ? (
             <ActivityIndicator size="small" color={Colors.primary} style={{ marginVertical: 20 }} />
-          ) : reservas.length === 0 ? (
+          ) : filteredReservas.length === 0 ? (
             <View style={styles.emptyManifest}>
-              <MaterialCommunityIcons name="account-off-outline" size={36} color={Colors.border} />
-              <Text style={styles.emptyText}>Sin reservaciones para este viaje</Text>
+              <MaterialCommunityIcons name="account-search-outline" size={36} color={Colors.border} />
+              <Text style={styles.emptyText}>
+                {searchQuery ? 'No hay pasajeros que coincidan con la búsqueda' : 'Sin pasajeros en esta categoría'}
+              </Text>
             </View>
           ) : (
             <View style={styles.passengerList}>
-              {reservas.map((res: any, idx: number) => {
+              {filteredReservas.map((res: any, idx: number) => {
                 const isBoarded = res.estado === 'confirmado';
                 return (
                   <TouchableOpacity
@@ -251,14 +335,14 @@ export default function DetalleViajeScreen({ route, navigation }: any) {
                       <Text style={styles.passengerCard}>
                         {res.identificador_tarjeta
                           ? `🪪 ${res.identificador_tarjeta}`
-                          : '⚠️ Sin tarjeta asignada'}
+                          : '⚠️ Sin credencial registrada'}
                       </Text>
                     </View>
 
-                    {/* Check icon */}
+                    {/* Check icon interactivo */}
                     <MaterialCommunityIcons
                       name={isBoarded ? 'check-circle' : 'checkbox-blank-circle-outline'}
-                      size={26}
+                      size={28}
                       color={isBoarded ? '#10b981' : Colors.border}
                     />
                   </TouchableOpacity>
@@ -266,6 +350,54 @@ export default function DetalleViajeScreen({ route, navigation }: any) {
               })}
             </View>
           )}
+        </View>
+      )}
+
+      {/* ── Boleto Digital QR (Solo Pasajero) ── */}
+      {!isConductor && (
+        <View style={styles.passengerTicketCard}>
+          <View style={styles.ticketHeader}>
+            <MaterialCommunityIcons name="ticket-confirmation" size={26} color={Colors.primary} />
+            <View style={{ flex: 1, marginLeft: 8 }}>
+              <Text style={styles.ticketTitle}>Pase de Abordar Digital</Text>
+              <Text style={styles.ticketSubtitle}>Presenta este código al chofer para subir</Text>
+            </View>
+            <View style={styles.ticketPill}>
+              <Text style={styles.ticketPillText}>Activo</Text>
+            </View>
+          </View>
+
+          <View style={styles.qrContainer}>
+            <Image
+              source={{
+                uri: `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(
+                  viaje.identificador_tarjeta || `RES-${viaje.reserva_id || viaje.id}`
+                )}`
+              }}
+              style={styles.qrImage}
+              resizeMode="contain"
+            />
+            <Text style={styles.qrCodeText}>
+              {viaje.identificador_tarjeta || `RES-${viaje.reserva_id || viaje.id}`}
+            </Text>
+          </View>
+
+          <View style={styles.ticketDetails}>
+            <View style={styles.ticketRow}>
+              <Text style={styles.ticketLabel}>Pasajero:</Text>
+              <Text style={styles.ticketValue}>{user?.gestor || user?.email}</Text>
+            </View>
+            <View style={styles.ticketRow}>
+              <Text style={styles.ticketLabel}>Asiento Asignado:</Text>
+              <Text style={[styles.ticketValue, { color: Colors.primary, fontWeight: '900', fontSize: 16 }]}>
+                {viaje.asiento_numero ? `#${viaje.asiento_numero}` : 'General / Sin Asignar'}
+              </Text>
+            </View>
+            <View style={styles.ticketRow}>
+              <Text style={styles.ticketLabel}>Ruta:</Text>
+              <Text style={styles.ticketValue}>{viaje.ruta_nombre || 'Ruta Corporativa'}</Text>
+            </View>
+          </View>
         </View>
       )}
 
@@ -589,5 +721,138 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: '700',
+  },
+  scanShortcutBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#6366f1',
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 16,
+    gap: 6,
+  },
+  scanShortcutBtnText: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  searchBarContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f1f5f9',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginHorizontal: Spacing.md,
+    marginTop: 8,
+    marginBottom: 8,
+    gap: 8,
+  },
+  searchBarInput: {
+    flex: 1,
+    fontSize: 13,
+    color: Colors.text,
+    padding: 0,
+  },
+  filterPillsRow: {
+    flexDirection: 'row',
+    paddingHorizontal: Spacing.md,
+    gap: 8,
+    marginBottom: 12,
+  },
+  filterPill: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 14,
+    backgroundColor: '#f1f5f9',
+  },
+  filterPillActive: {
+    backgroundColor: Colors.primary,
+  },
+  filterPillText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: Colors.textMuted,
+  },
+  filterPillTextActive: {
+    color: '#ffffff',
+  },
+  passengerTicketCard: {
+    backgroundColor: '#ffffff',
+    margin: Spacing.md,
+    borderRadius: 20,
+    padding: 20,
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  ticketHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  ticketTitle: {
+    fontSize: 17,
+    fontWeight: '900',
+    color: Colors.text,
+  },
+  ticketSubtitle: {
+    fontSize: 12,
+    color: Colors.textMuted,
+    fontWeight: '500',
+  },
+  ticketPill: {
+    backgroundColor: '#dcfce7',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  ticketPillText: {
+    color: '#16a34a',
+    fontSize: 11,
+    fontWeight: '900',
+  },
+  qrContainer: {
+    alignItems: 'center',
+    marginVertical: 20,
+    padding: 16,
+    backgroundColor: '#f8fafc',
+    borderRadius: 16,
+  },
+  qrImage: {
+    width: 200,
+    height: 200,
+    backgroundColor: '#ffffff',
+  },
+  qrCodeText: {
+    marginTop: 10,
+    fontSize: 13,
+    fontWeight: '800',
+    color: Colors.text,
+    letterSpacing: 1,
+  },
+  ticketDetails: {
+    backgroundColor: '#f1f5f9',
+    padding: 14,
+    borderRadius: 14,
+    gap: 8,
+  },
+  ticketRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  ticketLabel: {
+    fontSize: 13,
+    color: Colors.textMuted,
+    fontWeight: '600',
+  },
+  ticketValue: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: Colors.text,
   },
 });

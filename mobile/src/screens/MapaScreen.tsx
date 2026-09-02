@@ -13,6 +13,8 @@ import { useSmoothLocation } from '../hooks/useSmoothLocation';
 import { useGeofenceAlert } from '../hooks/useGeofenceAlert';
 import { AppConfig } from '../constants/config';
 import { RatingModal } from '../components/RatingModal';
+import { TelemetryQueueService } from '../utils/TelemetryQueueService';
+import { OfflineService } from '../utils/OfflineService';
 
 const MAPBOX_ACCESS_TOKEN = AppConfig.mapboxAccessToken;
 Mapbox.setAccessToken(MAPBOX_ACCESS_TOKEN);
@@ -146,6 +148,20 @@ export default function MapaScreen({ route: routeProp, navigation }: any) {
   const cameraRef = useRef<Mapbox.Camera>(null);
   const prevViajesLengthRef = useRef<number>(viajes.length);
   const [ratingModalVisible, setRatingModalVisible] = useState(false);
+
+  // Estados de conectividad y cola offline de telemetría
+  const [pendingLocationsCount, setPendingLocationsCount] = useState(0);
+  const [isNetworkOnline, setIsNetworkOnline] = useState(true);
+  const [isSyncingTelemetry, setIsSyncingTelemetry] = useState(false);
+
+  useEffect(() => {
+    const unsub = TelemetryQueueService.subscribe((count, online, syncing) => {
+      setPendingLocationsCount(count);
+      setIsNetworkOnline(online);
+      setIsSyncingTelemetry(syncing);
+    });
+    return () => unsub();
+  }, []);
 
   const isConductor = user?.rol === 'conductor';
 
@@ -313,8 +329,26 @@ export default function MapaScreen({ route: routeProp, navigation }: any) {
         'La central de emergencias ha recibido tu ubicación y reporte. Mantén la calma, la ayuda está en camino.'
       );
     } catch (error: any) {
-      console.error('Error reporting emergency:', error);
-      Alert.alert('Error', 'No se pudo enviar la alerta. Por favor, intenta de nuevo o llama al número de emergencias.');
+      console.error('Error reporting emergency, saving offline:', error);
+      const activeTripId = selectedViaje?.id || viajeActivo?.id || null;
+      let lat = userLocation ? userLocation[1] : 20.6736;
+      let lng = userLocation ? userLocation[0] : -103.3496;
+
+      await OfflineService.saveAlertaOffline({
+        viaje_id: activeTripId ? Number(activeTripId) : null,
+        tipo: type,
+        descripcion: type === 'sos' 
+          ? `🔴 ALERTA DE EMERGENCIA (SOS) iniciada por el ${isConductor ? 'conductor' : 'pasajero'}.`
+          : `⚠️ REPORTAR ACOSO/HOSTIGAMIENTO por el ${isConductor ? 'conductor' : 'pasajero'}.`,
+        latitud: lat,
+        longitud: lng,
+        prioridad: 'alta'
+      });
+
+      Alert.alert(
+        'Alerta Guardada (Modo Offline)',
+        'No hay señal en este momento, pero tu reporte de emergencia ha quedado registrado y se transmitirá automáticamente a la central al recuperar cobertura.'
+      );
     } finally {
       setSosModalVisible(false);
       setSosType(null);
@@ -346,15 +380,29 @@ export default function MapaScreen({ route: routeProp, navigation }: any) {
           const coords = [loc.coords.longitude, loc.coords.latitude];
           setUserLocation(coords);
 
-          // Transmitir posición GPS en tiempo real si el usuario es conductor
+          // Transmitir posición GPS en tiempo real si el usuario es conductor (con respaldo offline seguro)
           if (user && user.rol === 'conductor') {
             const activeVId = selectedViaje?.id || (viajesActivos && viajesActivos.length > 0 ? viajesActivos[0].id : undefined);
-            api.post('/transporte/locations', {
-              viaje_id: activeVId,
+            const punto = {
+              viaje_id: activeVId ? Number(activeVId) : undefined,
               latitud: loc.coords.latitude,
               longitud: loc.coords.longitude,
               velocidad: loc.coords.speed ? Math.max(0, loc.coords.speed * 3.6) : 0,
-            }).catch(err => console.log('[MapaScreen] Live GPS transmit error:', err?.message));
+              timestamp: new Date(loc.timestamp || Date.now()).toISOString(),
+            };
+
+            TelemetryQueueService.isOnline().then(online => {
+              if (!online) {
+                // Sin cobertura celular: guardar en la cola local para no perder el punto ni la auditoría
+                TelemetryQueueService.enqueueLocation(punto);
+              } else {
+                // Transmisión directa; si hay caída intermitente de red en carretera, respaldar offline
+                api.post('/transporte/locations', punto).catch(err => {
+                  console.log('[MapaScreen] Fallo envío GPS en vivo, respaldando en cola offline:', err?.message);
+                  TelemetryQueueService.enqueueLocation(punto);
+                });
+              }
+            });
           }
 
           if (navigationMode && route && route.coordinates && route.coordinates.length >= 2) {
@@ -681,6 +729,53 @@ export default function MapaScreen({ route: routeProp, navigation }: any) {
             Autobús cerca: a {(nearbyParada.distance).toFixed(0)}m de "{nearbyParada.parada.nombre}"
           </Text>
         </View>
+      )}
+
+      {/* Indicador Flotante de Conectividad y Telemetría Offline (Modo Conductor) */}
+      {isConductor && (
+        <TouchableOpacity
+          style={[
+            styles.connectivityBadge,
+            !isNetworkOnline
+              ? styles.connectivityOffline
+              : pendingLocationsCount > 0
+              ? styles.connectivityPending
+              : styles.connectivityOnline,
+          ]}
+          onPress={async () => {
+            if (isSyncingTelemetry) return;
+            const res = await TelemetryQueueService.syncPendingLocations();
+            if (res.synced > 0) {
+              Alert.alert('Sincronización Exitosa', `Se han sincronizado ${res.synced} coordenadas con la central.`);
+            } else if (!isNetworkOnline) {
+              Alert.alert('Modo Sin Señal', `Hay ${pendingLocationsCount} puntos guardados en tu teléfono. Se transmitirán automáticamente en cuanto tengas señal 4G/LTE.`);
+            }
+          }}
+          activeOpacity={0.85}
+        >
+          <MaterialCommunityIcons
+            name={
+              isSyncingTelemetry
+                ? 'sync'
+                : !isNetworkOnline
+                ? 'cloud-off-outline'
+                : pendingLocationsCount > 0
+                ? 'cloud-upload-outline'
+                : 'cloud-check'
+            }
+            size={16}
+            color="#ffffff"
+          />
+          <Text style={styles.connectivityText}>
+            {isSyncingTelemetry
+              ? `Sincronizando ${pendingLocationsCount}...`
+              : !isNetworkOnline
+              ? `Sin señal (${pendingLocationsCount} en cola)`
+              : pendingLocationsCount > 0
+              ? `Subiendo ${pendingLocationsCount} puntos...`
+              : 'En línea'}
+          </Text>
+        </TouchableOpacity>
       )}
       <Mapbox.MapView style={styles.map} logoEnabled={false} attributionEnabled={false} styleURL={Mapbox.StyleURL.Dark}>
         <Mapbox.Camera
@@ -1838,5 +1933,36 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '800',
     flex: 1,
+  },
+  connectivityBadge: {
+    position: 'absolute',
+    top: 50,
+    right: 16,
+    zIndex: 1000,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 7,
+    paddingHorizontal: 12,
+    borderRadius: 20,
+    gap: 6,
+    elevation: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+  },
+  connectivityOnline: {
+    backgroundColor: '#10b981', // Verde
+  },
+  connectivityOffline: {
+    backgroundColor: '#ef4444', // Rojo
+  },
+  connectivityPending: {
+    backgroundColor: '#f59e0b', // Ámbar
+  },
+  connectivityText: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: '800',
   },
 });

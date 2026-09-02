@@ -39,4 +39,12 @@ export class TransporteGateway implements OnGatewayConnection, OnGatewayDisconne
       this.server.emit('location_update', locationData);
     }
   }
+
+  // Transmite alerta de emergencia o incidente en tiempo real a la torre de control
+  broadcastAlert(alertaData: any) {
+    if (this.server) {
+      this.logger.log(`[WebSocket] Emitiendo alerta en tiempo real: ${alertaData.tipo} (Viaje: #${alertaData.viaje_id || 'S/V'})`);
+      this.server.emit('alerta_emergencia', alertaData);
+    }
+  }
 }

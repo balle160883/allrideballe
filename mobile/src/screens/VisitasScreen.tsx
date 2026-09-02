@@ -16,7 +16,7 @@ import ViajeCard from '../components/VisitaCard';
 import { useFocusEffect } from '@react-navigation/native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useProximityAlert } from '../hooks/useProximityAlert';
-import RatingModal from '../components/RatingModal';
+import { RatingModal } from '../components/RatingModal';
 import { useAuth } from '../context/AuthContext';
 
 type Tab = 'activos' | 'completados';
@@ -201,9 +201,13 @@ export default function VisitasScreen({ navigation }: any) {
       {viajeACalificar && (
         <RatingModal
           visible={ratingModalVisible}
-          onClose={() => setRatingModalVisible(false)}
-          onSubmit={handleSubmitRating}
-          viajeNombre={viajeACalificar.ruta_nombre}
+          onClose={() => {
+            setRatingModalVisible(false);
+            refresh();
+          }}
+          viajeId={viajeACalificar.viaje_id || viajeACalificar.id}
+          rutaNombre={viajeACalificar.ruta_nombre}
+          conductorNombre={viajeACalificar.conductor_nombre}
         />
       )}
     </View>

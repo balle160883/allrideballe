@@ -171,5 +171,70 @@ export const OfflineService = {
     } catch (e) {
       console.error('[OfflineService] Error sincronizando abordajes:', e);
     }
+  },
+
+  // ==========================================
+  // ALERTAS / SOS OFFLINE
+  // ==========================================
+  async saveAlertaOffline(alerta: {
+    viaje_id: number | null;
+    tipo: string;
+    descripcion: string;
+    latitud?: number;
+    longitud?: number;
+    prioridad?: string;
+    timestamp?: string;
+  }) {
+    try {
+      const key = '@pending_alertas_sos';
+      const existingStr = await AsyncStorage.getItem(key);
+      const existing = existingStr ? JSON.parse(existingStr) : [];
+      const newAlerta = {
+        id: `${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+        ...alerta,
+        timestamp: alerta.timestamp || new Date().toISOString(),
+      };
+      await AsyncStorage.setItem(key, JSON.stringify([...existing, newAlerta]));
+      console.log('[OfflineService] Alerta SOS/incidente guardada offline');
+      return true;
+    } catch (e) {
+      console.error('[OfflineService] Error guardando alerta offline:', e);
+      return false;
+    }
+  },
+
+  async syncPendingAlertas() {
+    const key = '@pending_alertas_sos';
+    try {
+      const data = await AsyncStorage.getItem(key);
+      if (!data) return;
+      const pending: any[] = JSON.parse(data);
+      if (pending.length === 0) return;
+
+      if (!(await this.isOnline())) return;
+
+      console.log(`[OfflineService] Sincronizando ${pending.length} alertas pendientes...`);
+      const remaining: any[] = [];
+
+      for (const item of pending) {
+        try {
+          await api.post('/transporte/alertas', {
+            viaje_id: item.viaje_id,
+            tipo: item.tipo,
+            descripcion: item.descripcion,
+            latitud: item.latitud,
+            longitud: item.longitud,
+            prioridad: item.prioridad || 'alta',
+          });
+          console.log(`[OfflineService] Alerta ${item.tipo} sincronizada con éxito`);
+        } catch {
+          remaining.push(item);
+        }
+      }
+
+      await AsyncStorage.setItem(key, JSON.stringify(remaining));
+    } catch (e) {
+      console.error('[OfflineService] Error sincronizando alertas:', e);
+    }
   }
 };
