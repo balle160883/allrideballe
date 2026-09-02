@@ -468,6 +468,12 @@ export async function fetchAuditoriaAsistencia(filtros: { rutaId?: number; fecha
   return res.json();
 }
 
+export async function fetchAuditoriaSLA(): Promise<any> {
+  const res = await fetch(`${API_URL}/transporte/reportes/sla`, { headers: getAuthHeader() });
+  if (!res.ok) throw new Error('Failed to fetch SLA audit data');
+  return res.json();
+}
+
 // ==========================================
 // CATÁLOGO DE PROVEEDORES (COMPAÑÍAS)
 // ==========================================
